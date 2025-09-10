@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sistema PyME – Frutas & Verduras (Supabase)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --bg:#0f172a; --card:#111827; --muted:#334155; --text:#e5e7eb; --accent:#8b5cf6; --ok:#10b981; --warn:#f59e0b; --err:#ef4444; }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#1e1b4b,#0b1020);font-family:Inter,system-ui,Arial;color:var(--text)}
+    header{padding:16px;border-bottom:1px solid #26314e;background:radial-gradient(1000px 350px at 10% -20%,#2a2e78 0%,transparent 55%);display:flex;align-items:center;gap:12px}
+    h1{margin:0;font-size:18px;font-weight:700}
+    .sub{opacity:.8;font-size:12px;margin-left:6px}
+    .wrap{max-width:1150px;margin:14px auto;padding:0 12px}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 16px;align-items:center}
+    .tab{background:#1f2937;border:1px solid #334155;color:#cbd5e1;padding:8px 12px;border-radius:10px;cursor:pointer;display:none}
+    .tab.active{border-color:#8b5cf6;color:white;box-shadow:0 0 0 2px #8b5cf633 inset}
+    .config{margin-left:auto;background:#0b162d;border:1px solid #2b3a5a;color:#cbd5e1;padding:8px 12px;border-radius:10px;cursor:pointer;display:none}
+    .card{background:#0b1222;border:1px solid #22304b;border-radius:14px;padding:14px;margin-bottom:16px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:800px){.grid{grid-template-columns:1fr}}
+    label{font-size:12px;opacity:.85;margin-bottom:4px;display:block}
+    input,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #334155;background:#0b162d;color:#e5e7eb}
+    button{border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
+    .primary{background:var(--accent);color:white} .ghost{background:#111827;color:#cbd5e1;border:1px solid #2b3a5a}
+    .ok{background:var(--ok);color:#052e22} .warn{background:var(--warn);color:#190d00} .err{background:var(--err);color:#2a0909}
+    table{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
+    th,td{padding:10px;border-bottom:1px solid #22304b} th{text-align:left;opacity:.8}
+    .tag{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid #334155;background:#0b162d;display:inline-block}
+    .right{display:flex;gap:8px;justify-content:flex-end}
+    #toast{position:fixed;top:16px;right:16px;display:none;min-width:220px;max-width:360px;padding:12px 14px;border-radius:12px;background:#111827;border:1px solid #2b3a5a;color:#e5e7eb;box-shadow:0 8px 30px #0006;z-index:9999}
+    .muted{opacity:.7}
+    .num{width:120px}
+    .filters{display:grid;grid-template-columns:1fr 1fr 1fr auto auto;gap:8px;margin:8px 0}
+    @media(max-width:900px){.filters{grid-template-columns:1fr 1fr}}
+    .totalbar{margin-top:8px;display:flex;justify-content:flex-end;font-weight:700}
+    .pricecell{display:flex;gap:6px;align-items:center}
+    .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0 4px}
+    @media (max-width:900px){.kpis{grid-template-columns:1fr}}
+    .kpi{background:#0b162d;border:1px solid #2b3a5a;border-radius:12px;padding:12px}
+    .kpi .big{font-size:20px;font-weight:700}
+    .userbox{margin-left:auto;display:flex;align-items:center;gap:8px}
+    .logout{background:#1f2937;border:1px solid #334155;color:#cbd5e1;border-radius:10px;padding:6px 10px;cursor:pointer}
+    #loginView{max-width:420px;margin:12vh auto;padding:16px}
+    .link{color:#a78bfa;cursor:pointer;text-decoration:underline}
+  </style>
+  <script src="https://esm.sh/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <header id="appHeader" style="display:none">
+    <h1>Sistema PyME – Frutas & Verduras</h1>
+    <div class="sub">Sesión: <span id="whoami"></span></div>
+    <div class="userbox">
+      <span class="chip" id="roleChip" style="display:none"></span>
+      <button class="logout" id="btn-logout">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <div id="toast"></div>
+
+  <!-- ===== LOGIN ===== -->
+  <div id="loginView" class="card">
+    <h2>Ingresar</h2>
+    <div class="grid">
+      <div><label>Email</label><input id="lg-email" placeholder="correo@empresa.com" autocomplete="username" /></div>
+      <div><label>Contraseña</label><input id="lg-pass" type="password" placeholder="••••••" autocomplete="current-password" /></div>
+    </div>
+    <div class="right" style="margin-top:10px;gap:8px">
+      <button class="ghost" id="btn-signup">Crear cuenta</button>
+      <button class="primary" id="btn-login">Entrar</button>
+    </div>
+    <div class="muted" style="margin-top:8px">¿Olvidaste tu clave? <span id="btn-reset" class="link">Restablecer</span></div>
+  </div>
+
+  <!-- ===== APP ===== -->
+  <div id="app" class="wrap" style="display:none">
+    <div class="tabs" id="tabsBar">
+      <button class="tab" data-tab="pedidos">🧾 Pedidos</button>
+      <button class="tab" data-tab="stock">📦 Stock</button>
+      <button class="tab" data-tab="produccion">🏭 Producción</button>
+      <button class="tab" data-tab="resumen">📄 Resumen</button>
+      <button class="tab" data-tab="pendientes">📊 Pedidos pendientes</button>
+      <button class="tab" data-tab="historial">📑 Historial</button>
+      <button class="tab" data-tab="usuarios">👤 Usuarios</button>
+      <button class="config" id="btn-config">⚙ Configuración</button>
+    </div>
+
+    <!-- ===== PEDIDOS ===== -->
+    <section class="card" id="tab-pedidos" style="display:none">
+      <h2>Registrar pedido</h2>
+      <div class="grid">
+        <div><label>Fecha</label><input type="date" id="p-fecha" /></div>
+        <div><label>Proveedor</label><input id="p-proveedor" /></div>
+        <div><label>Código</label><input id="p-codigo" placeholder="ZAN-001 o PROD-001" /></div>
+        <div><label>Descripción (se autocompleta)</label><input id="p-descripcion" /></div>
+        <div><label>Cantidad pedida</label><input id="p-cant" class="num" type="number" min="0" step="0.01" /></div>
+        <div><label>Unidad</label><select id="p-unidad"><option>kg</option><option>unid</option><option>bandejas</option><option>paquetes</option></select></div>
+        <div><label>Precio unitario</label><input id="p-precio" class="num" type="number" min="0" step="0.01" /></div>
+        <div><label>Estado</label><select id="p-estado"><option>Pendiente</option><option>Entregado</option><option>Cancelado</option></select></div>
+      </div>
+      <div class="right" style="margin-top:10px">
+        <button class="ghost" id="p-limpiar">Limpiar</button>
+        <button class="primary" id="p-crear">Crear pedido</button>
+      </div>
+      <table id="tbl-pedidos"><thead><tr>
+        <th>Fecha</th><th>Código</th><th>Descripción</th><th>Prov.</th>
+        <th>Pedida</th><th>Recibido</th><th>Unidad</th><th>Precio</th><th>Estado</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- ===== STOCK ===== -->
+    <section class="card" id="tab-stock" style="display:none">
+      <h2>Stock</h2>
+      <div class="right" style="margin-bottom:8px">
+        <button class="err" id="btn-reset-stock">Reiniciar stock (todo a 0)</button>
+      </div>
+      <table id="tbl-stock"><thead><tr>
+        <th>Código</th><th>Descripción</th><th>Stock</th><th>Unidad</th><th>Pto. Reposición</th><th>Alerta</th>
+      </tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- ===== PRODUCTOS (CONFIG) ===== -->
+    <section class="card" id="tab-productos" style="display:none">
+      <h2>Catálogo de productos</h2>
+      <div class="grid">
+        <div><label>Código</label><input id="pd-codigo" /></div>
+        <div><label>Descripción</label><input id="pd-descripcion" /></div>
+        <div><label>Unidad</label><select id="pd-unidad"><option>bandejas</option><option>kg</option><option>paquetes</option><option>unid</option></select></div>
+        <div><label>Envase</label><input id="pd-envase" /></div>
+      </div>
+      <div class="right" style="margin-top:10px"><button class="primary" id="pd-agregar">Agregar producto</button></div>
+      <table id="tbl-productos"><thead><tr><th>Código</th><th>Descripción</th><th>Unidad</th><th>Envase</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- ===== PRODUCCIÓN ===== -->
+    <section class="card" id="tab-produccion" style="display:none">
+      <h2>Orden de producción</h2>
+      <div class="grid">
+        <div><label>Fecha</label><input type="date" id="pr-fecha" /></div>
+        <div><label>Producto final (código o descripción)</label><input id="pr-desc" /></div>
+        <div><label>Cliente</label><input id="pr-cliente" /></div>
+        <div><label>Cantidad</label><input id="pr-cant" type="number" min="0" step="0.01" /></div>
+        <div><label>Unidad</label><select id="pr-unidad"><option>bandejas</option><option>kg</option><option>paquetes</option><option>unid</option></select></div>
+        <div><label>Envase</label><input id="pr-envase" /></div>
+        <div><label>INSUMO (código)</label><input id="pr-insumo" placeholder="ZAN-001" /></div>
+        <div><label>Consumo</label><input id="pr-insumo-cant" type="number" min="0" step="0.01" /></div>
+        <div><label>Estado</label><select id="pr-estado"><option>En proceso</option><option>Terminado</option></select></div>
+        <div style="grid-column:1/-1"><label>Observaciones</label><input id="pr-obs" /></div>
+      </div>
+      <div class="right" style="margin-top:10px"><button class="primary" id="pr-crear">Crear orden</button></div>
+      <table id="tbl-prod"><thead><tr>
+        <th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Insumo</th><th>Consumo</th><th>Estado</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- ===== RESUMEN ===== -->
+    <section class="card" id="tab-resumen" style="display:none">
+      <h2>Órdenes finalizadas (para Remito)</h2>
+      <div class="filters">
+        <div><label>Cliente (contiene)</label><input id="f-cli" /></div>
+        <div><label>Desde</label><input type="date" id="f-desde" /></div>
+        <div><label>Hasta</label><input type="date" id="f-hasta" /></div>
+        <div class="right" style="align-items:end"><button class="ghost" id="f-limpiar">Limpiar</button></div>
+        <div class="right" style="align-items:end"><button class="primary" id="btn-print">Imprimir Remito</button></div>
+      </div>
+      <table id="tbl-resumen"><thead><tr>
+        <th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Venta Total</th><th>Obs</th><th></th>
+      </tr></thead><tbody></tbody></table>
+      <div class="totalbar">Total filtrado: $ <span id="res-total">0.00</span></div>
+    </section>
+
+    <!-- ===== PEDIDOS PENDIENTES ===== -->
+    <section class="card" id="tab-pendientes" style="display:none">
+      <h2>Pedidos pendientes (Compras)</h2>
+      <div class="kpis">
+        <div class="kpi"><div class="muted">Órdenes pendientes</div><div class="big" id="pp-kpi-pend">0</div></div>
+        <div class="kpi"><div class="muted">Monto estimado</div><div class="big">$ <span id="pp-kpi-monto">0.00</span></div></div>
+        <div class="kpi"><div class="muted">Proveedores activos</div><div class="big" id="pp-kpi-prov">0</div></div>
+      </div>
+      <div class="filters">
+        <div><label>Proveedor (contiene)</label><input id="pp-prov" /></div>
+        <div><label>Desde</label><input type="date" id="pp-desde" /></div>
+        <div><label>Hasta</label><input type="date" id="pp-hasta" /></div>
+        <div class="right" style="align-items:end"><button class="ghost" id="pp-limpiar">Limpiar filtros</button></div>
+        <div class="right" style="align-items:end"><button class="primary" id="pp-print">Imprimir</button></div>
+      </div>
+      <table id="tbl-pendientes"><thead><tr>
+        <th>Fecha</th><th>Proveedor</th><th>Código</th><th>Descripción</th>
+        <th>Pedida</th><th>Recibido</th><th>Pendiente</th><th>Unidad</th><th>Precio</th><th>Subtotal</th><th>Acciones</th>
+      </tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- ===== HISTORIAL ===== -->
+    <section class="card" id="tab-historial" style="display:none">
+      <h2>Historial de movimientos de stock</h2>
+      <table id="tbl-historial"><thead><tr>
+        <th>Fecha</th><th>Código</th><th>Descripción</th><th class="right">Cambio</th><th>Unidad</th><th>Motivo</th>
+      </tr></thead><tbody></tbody></table>
+    </section>
+
+    <!-- ===== USUARIOS ===== -->
+    <section class="card" id="tab-usuarios" style="display:none">
+      <h2>Gestión de usuarios y permisos</h2>
+      <div class="grid">
+        <div><label>User ID (Auth)</label><input id="u-id" placeholder="Pega aquí el UUID del usuario" /></div>
+        <div><label>Nombre visible</label><input id="u-name" placeholder="Juan Pérez" /></div>
+        <div><label>Rol</label><select id="u-role"><option value="admin">admin</option><option value="operador">operador</option><option value="consulta">consulta</option></select></div>
+        <div><label>Permisos (coma)</label><input id="u-perms" placeholder="pedidos,stock,produccion,..." /></div>
+      </div>
+      <div class="right" style="margin-top:10px">
+        <button class="ghost" id="u-refresh">Refrescar</button>
+        <button class="primary" id="u-guardar">Guardar / Actualizar</button>
+      </div>
+      <table id="tbl-users"><thead><tr><th>User ID</th><th>Nombre</th><th>Rol</th><th>Permisos</th></tr></thead><tbody></tbody></table>
+      <p class="muted" style="margin-top:6px">💡 Cada usuario hace “Crear cuenta”. Copiá su <b>User ID</b> desde Supabase Auth o desde este listado y acá le asignás rol/permisos.</p>
+    </section>
+  </div>
+
+  <script>
+  /* ===== CONFIG SUPABASE (las tuyas) ===== */
+  const SUPABASE_URL = "https://zxbzjdobgrlabbfqwsag.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4YnpqZG9iZ3JsYWJiZnF3c2FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1MTg3OTcsImV4cCI6MjA3MzA5NDc5N30.DmgzIiRSsZ_yEl9MfLd2R6n3zbaghq2JB4FLcKb4KNs";
+  const { createClient } = window.supabase;
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  /* ===== Estado / Helpers ===== */
+  const cache = { org:null, profile:null, perms:[], products:[], stock:{}, pedidos:[], prod:[], resumen:[], hist:[], users:[] };
+  const $ = id=>document.getElementById(id);
+  const fmt2 = n => (isFinite(n)?Number(n).toFixed(2):'');
+  function toast(m){ const t=$('toast'); t.style.display='block'; t.textContent=m; setTimeout(()=>t.style.display='none',2000); }
+  function escapeHtml(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  const can = p => cache.perms.includes(p);
+
+  /* ===== Login / Signup PARCHEADO (ensureBootstrap) ===== */
+  const ALL_PERMS = ['pedidos','stock','produccion','resumen','pendientes','historial','config','usuarios','stock_reset','pedidos_entregar','produccion_terminar','resumen_borrar','resumen_print'];
+
+  $('btn-login').onclick = async ()=>{
+    const email=$('lg-email').value.trim(), pass=$('lg-pass').value;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password:pass });
+    if(error){ toast(error.message); return; }
+    await ensureBootstrap(data.user);
+    await afterAuth(data.user);
+  };
+  $('btn-signup').onclick = async ()=>{
+    const email=$('lg-email').value.trim(), pass=$('lg-pass').value;
+    if(!email||!pass){ toast('Completá email y contraseña'); return; }
+    const { data, error } = await supabase.auth.signUp({ email, password:pass });
+    if(error){ toast(error.message); return; }
+    if(!data.session){
+      toast('Te enviamos un email para confirmar. Luego presioná "Entrar".');
+    } else {
+      await ensureBootstrap(data.user);
+      await afterAuth(data.user);
+    }
+  };
+  $('btn-reset').onclick = async ()=>{
+    const email = prompt('Email para restablecer:'); if(!email) return;
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    toast(error?error.message:'Te enviamos un email de restablecimiento');
+  };
+  $('btn-logout').onclick = async ()=>{ await supabase.auth.signOut(); showLogin(); };
+  supabase.auth.onAuthStateChange(async (ev, session)=>{
+    if(ev==='SIGNED_IN' && session?.user){ await ensureBootstrap(session.user); await afterAuth(session.user); }
+    if(ev==='SIGNED_OUT'){ showLogin(); }
+  });
+  async function ensureBootstrap(user){
+    const { data:profile } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
+    if(profile) return;
+    const { data:org, error:e1 } = await supabase.from('orgs').insert({ name:'Mi PyME', owner:user.id }).select().single();
+    if(e1){ toast('Error creando organización: '+e1.message); return; }
+    const { error:e2 } = await supabase.from('profiles').insert({ user_id:user.id, org_id:org.id, name:'Administrador', role:'admin', perms:ALL_PERMS });
+    if(e2){ toast('Error creando perfil: '+e2.message); return; }
+    toast('Organización y perfil admin creados.');
+  }
+  function showLogin(){ $('appHeader').style.display='none'; $('app').style.display='none'; $('loginView').style.display='block'; }
+  function showApp(){ $('loginView').style.display='none'; $('appHeader').style.display='flex'; $('app').style.display='block'; }
+
+  /* ===== Post login ===== */
+  async function afterAuth(user){
+    const { data:profile } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
+    if(!profile){ toast('No tenés perfil. Pedí acceso al admin.'); showLogin(); return; }
+    cache.profile = profile; cache.org={ id:profile.org_id }; cache.perms = profile.perms||[];
+    $('whoami').textContent = user.email; const rc=$('roleChip'); rc.style.display='none'; rc.textContent=profile.role;
+    document.querySelectorAll('.tab').forEach(b=>{ const tab=b.dataset.tab; b.style.display = cache.perms.includes(tab)?'inline-block':'none'; });
+    $('btn-config').style.display = cache.perms.includes('config')?'inline-block':'none';
+    showApp();
+    await loadAll();
+    renderProductos(); renderStock(); renderPedidos(); renderProduccion(); renderResumen(); renderPendientes(); renderHistorial(); await renderUsers();
+    const first = Array.from(document.querySelectorAll('.tab')).find(b=>b.style.display!=='none'); if(first) activateTab(first.dataset.tab);
+  }
+
+  /* ===== Carga de datos ===== */
+  async function loadAll(){
+    const org=cache.org.id;
+    const [{data:products=[]},{data:stockRows=[]},{data:pedidos=[]},{data:prod=[]},{data:resumen=[]},{data:hist=[]}] = await Promise.all([
+      supabase.from('products').select('*').eq('org_id',org),
+      supabase.from('stock').select('*').eq('org_id',org),
+      supabase.from('pedidos').select('*').eq('org_id',org).order('created_at',{ascending:false}),
+      supabase.from('produccion').select('*').eq('org_id',org).order('created_at',{ascending:false}),
+      supabase.from('resumen').select('*').eq('org_id',org).order('created_at',{ascending:false}),
+      supabase.from('historial_stock').select('*').eq('org_id',org).order('fecha',{ascending:false}),
+    ]);
+    cache.products=products;
+    cache.stock=Object.fromEntries(stockRows.map(s=>[s.codigo,s]));
+    cache.pedidos=pedidos; cache.prod=prod; cache.resumen=resumen; cache.hist=hist;
+  }
+
+  /* ===== Productos ===== */
+  $('btn-config').onclick = ()=>{
+    if(!can('config')) return toast('Sin permiso');
+    const sec = $('tab-productos'); sec.style.display = (sec.style.display==='none'||!sec.style.display)?'block':'none';
+  };
+  $('pd-agregar').onclick = async ()=>{
+    if(!can('config')) return toast('Sin permiso');
+    const codigo=$('pd-codigo').value.trim(), descripcion=$('pd-descripcion').value.trim(), unidad=$('pd-unidad').value, envase=$('pd-envase').value.trim();
+    if(!codigo||!descripcion) return toast('Código y descripción');
+    const org=cache.org.id;
+    const { data:exist } = await supabase.from('products').select('id').eq('org_id',org).eq('codigo',codigo).maybeSingle();
+    if(exist) return toast('Código ya existe');
+    const { error } = await supabase.from('products').insert({ org_id:org, codigo, descripcion, unidad, envase });
+    if(error) return toast(error.message);
+    await loadAll(); renderProductos(); toast('Producto agregado'); ['pd-codigo','pd-descripcion','pd-envase'].forEach(i=>$(i).value='');
+  };
+  function delProducto(code){ return async ()=>{
+    if(!can('config')) return toast('Sin permiso');
+    const org=cache.org.id; const row=cache.products.find(p=>p.codigo===code); if(!row) return;
+    const { error } = await supabase.from('products').delete().eq('id',row.id);
+    if(error) return toast(error.message); await loadAll(); renderProductos(); toast('Producto borrado');
+  }; }
+  function renderProductos(){
+    const tbody=document.querySelector('#tbl-productos tbody');
+    tbody.innerHTML = cache.products.map(p=>`
+      <tr><td>${p.codigo}</td><td>${p.descripcion}</td><td>${p.unidad||''}</td><td>${p.envase||''}</td>
+      <td class="right"><button class="ghost" onclick="(${delProducto.toString()})('${p.codigo}')()">Borrar</button></td></tr>
+    `).join('') || `<tr><td colspan="5" class="muted">Sin productos</td></tr>`;
+  }
+  const prodByCode = c => cache.products.find(p=>(p.codigo||'').toLowerCase()===String(c||'').toLowerCase());
+  const prodByAny = v => cache.products.find(p => (p.codigo||'').toLowerCase()===String(v||'').toLowerCase() || (p.descripcion||'').toLowerCase()===String(v||'').toLowerCase());
+
+  /* ===== Stock & Historial ===== */
+  async function sbUpsertStock({codigo,descripcion,unidad,delta,motivo}){
+    const org=cache.org.id; const row=cache.stock[codigo];
+    if(row){
+      const newQty = (Number(row.qty)||0) + Number(delta||0);
+      const { error } = await supabase.from('stock').update({ qty:newQty, descripcion: row.descripcion||descripcion, unidad: row.unidad||unidad }).eq('id',row.id);
+      if(error) throw error; cache.stock[codigo].qty=newQty;
+    }else{
+      const { data, error } = await supabase.from('stock').insert({ org_id:org, codigo, descripcion, unidad, qty:Number(delta||0) }).select().single();
+      if(error) throw error; cache.stock[codigo]=data;
+    }
+    await supabase.from('historial_stock').insert({ org_id:org, codigo, descripcion, delta, unidad, motivo: motivo||'' });
+  }
+  async function sbConsumeStock(codigo,qty,motivo){
+    const row=cache.stock[codigo]; if(!row) return false;
+    if((Number(row.qty)||0) < (Number(qty)||0)) return false;
+    await sbUpsertStock({codigo, descripcion:row.descripcion, unidad:row.unidad, delta:-Number(qty), motivo});
+    return true;
+  }
+  $('btn-reset-stock').onclick = async ()=>{
+    if(!can('stock_reset')) return toast('Sin permiso');
+    const rows=Object.values(cache.stock); const org=cache.org.id;
+    for(const r of rows){ if(Number(r.qty||0)!==0){ await supabase.from('historial_stock').insert({ org_id:org, codigo:r.codigo, descripcion:r.descripcion, delta:-Number(r.qty||0), unidad:r.unidad, motivo:'Reset a 0' }); } }
+    const { error } = await supabase.from('stock').update({ qty:0 }).eq('org_id',org);
+    if(error) return toast(error.message);
+    await loadAll(); renderStock(); renderHistorial(); toast('Stock reiniciado');
+  };
+  function setRepo(codigo){ return async (val)=>{
+    const row=cache.stock[codigo]; if(!row) return;
+    const { error } = await supabase.from('stock').update({ repo: Number(val)||0 }).eq('id',row.id);
+    if(error) return toast(error.message);
+    cache.stock[codigo].repo = Number(val)||0;
+  }; }
+  function renderStock(){
+    const tbody=document.querySelector('#tbl-stock tbody');
+    const rows = Object.entries(cache.stock)
+      .filter(([c,s])=>(Number(s.qty)||0)>0) /* ocultar 0 */
+      .map(([c,s])=>{
+        const alert = (s.repo && (Number(s.qty)||0)<=s.repo) ? '⚠️ Bajo' : '';
+        return `<tr><td>${c}</td><td>${s.descripcion||''}</td><td>${fmt2(+s.qty||0)}</td><td>${s.unidad||''}</td>
+          <td><input type="number" min="0" step="0.01" value="${s.repo||0}" style="width:110px" oninput="(${setRepo.toString()})('${c}')(this.value)"></td>
+          <td>${alert}</td></tr>`;
+      }).join('');
+    tbody.innerHTML = rows || `<tr><td colspan="6" class="muted">Sin insumos en stock</td></tr>`;
+    $('btn-reset-stock').style.display = can('stock_reset')?'inline-block':'none';
+  }
+  function renderHistorial(){
+    const tbody=document.querySelector('#tbl-historial tbody');
+    tbody.innerHTML = cache.hist.map(h=>`
+      <tr><td>${new Date(h.fecha).toLocaleString()}</td><td>${h.codigo||''}</td><td>${h.descripcion||''}</td>
+      <td class="right">${h.delta>0?'+':''}${fmt2(h.delta)}</td><td>${h.unidad||''}</td><td>${h.motivo||''}</td></tr>
+    `).join('') || `<tr><td colspan="6" class="muted">Sin movimientos</td></tr>`;
+  }
+
+  /* ===== Pedidos ===== */
+  $('p-codigo').addEventListener('blur', ()=>{
+    const p=prodByCode(($('p-codigo').value||'').trim().toLowerCase());
+    if(p){ $('p-descripcion').value=p.descripcion||$('p-descripcion').value; $('p-unidad').value=p.unidad||$('p-unidad').value; }
+  });
+  $('p-crear').onclick = async ()=>{
+    if(!can('pedidos')) return toast('Sin permiso');
+    const pedido = {
+      fecha: $('p-fecha').value || new Date().toISOString().slice(0,10),
+      codigo: $('p-codigo').value.trim(),
+      descripcion: $('p-descripcion').value.trim(),
+      prov: $('p-proveedor').value.trim(),
+      cant: parseFloat($('p-cant').value||0),
+      recibido: null, recibido_aplicado: 0,
+      unidad: $('p-unidad').value, precio: parseFloat($('p-precio').value||0),
+      estado: $('p-estado').value
+    };
+    if(!pedido.codigo || !pedido.cant) return toast('Código y cantidad');
+    const prod=prodByCode(pedido.codigo); if(prod){ if(!pedido.descripcion) pedido.descripcion=prod.descripcion; if(!pedido.unidad) pedido.unidad=prod.unidad; }
+    const org=cache.org.id;
+    const { error } = await supabase.from('pedidos').insert({ org_id:org, ...pedido });
+    if(error) return toast(error.message);
+    if(pedido.estado==='Entregado'){
+      const rec = (pedido.recibido!=null)?pedido.recibido:pedido.cant;
+      await sbUpsertStock({ codigo:pedido.codigo, descripcion:pedido.descripcion, unidad:pedido.unidad, delta:rec, motivo:'Recepción pedido' });
+      await supabase.from('pedidos').update({ recibido_aplicado: rec }).eq('org_id',org).eq('codigo',pedido.codigo).eq('fecha',pedido.fecha);
+    }
+    await loadAll(); renderPedidos(); renderStock(); renderHistorial(); renderPendientes(); toast('Pedido creado');
+  };
+  $('p-limpiar').onclick = ()=>{ ['p-fecha','p-codigo','p-descripcion','p-proveedor','p-cant','p-precio'].forEach(i=>$(i).value=''); $('p-estado').value='Pendiente'; };
+
+  function setPedidoRecibido(id){ return async (val)=>{
+    const rec = (val===''?null:Math.max(0,parseFloat(val||0)));
+    const { error } = await supabase.from('pedidos').update({ recibido: rec }).eq('id',id);
+    if(error) return toast(error.message);
+    await loadAll(); renderPedidos(); renderPendientes();
+  }; }
+  async function markPedidoEntregado(id){
+    if(!can('pedidos_entregar')) return toast('Sin permiso');
+    const { data:p } = await supabase.from('pedidos').select('*').eq('id',id).maybeSingle();
+    if(!p) return;
+    const recTarget = (p.recibido!=null? p.recibido : p.cant);
+    const diff = recTarget - (p.recibido_aplicado||0);
+    if(Math.abs(diff)>0){
+      await sbUpsertStock({ codigo:p.codigo, descripcion:p.descripcion||'', unidad:p.unidad||'', delta:diff, motivo:`Recepción pedido ${id}` });
+    }
+    await supabase.from('pedidos').update({ estado:'Entregado', recibido_aplicado: recTarget }).eq('id',id);
+    await loadAll(); renderPedidos(); renderStock(); renderPendientes(); renderHistorial(); toast('Entregado');
+  }
+  function delPedido(id){ return async ()=>{
+    const p = cache.pedidos.find(x=>x.id===id); if(!p) return;
+    if(p.recibido_aplicado){ await sbUpsertStock({ codigo:p.codigo, descripcion:p.descripcion||'', unidad:p.unidad||'', delta:-p.recibido_aplicado, motivo:`Reverso recepción ${id}` }); }
+    await supabase.from('pedidos').delete().eq('id',id);
+    await loadAll(); renderPedidos(); renderStock(); renderHistorial(); renderPendientes(); toast('Pedido borrado');
+  }; }
+  function renderPedidos(){
+    const tbody=document.querySelector('#tbl-pedidos tbody');
+    tbody.innerHTML = cache.pedidos.map(p=>`
+      <tr>
+        <td>${p.fecha}</td><td>${p.codigo}</td><td>${p.descripcion||'-'}</td><td>${p.prov||'-'}</td>
+        <td>${p.cant}</td>
+        <td><input type="number" class="num" min="0" step="0.01" value="${p.recibido??''}" placeholder="${p.cant}" oninput="(${setPedidoRecibido.toString()})('${p.id}')(this.value)"></td>
+        <td>${p.unidad||'-'}</td><td>${p.precio!=null?fmt2(p.precio):'-'}</td>
+        <td><span class="tag">${p.estado}</span></td>
+        <td class="right">
+          ${can('pedidos_entregar')?`<button class="ok" onclick="markPedidoEntregado('${p.id}')">Entregado</button>`:''}
+          <button class="ghost" onclick="(${delPedido.toString()})('${p.id}')()">Borrar</button>
+        </td>
+      </tr>
+    `).join('') || `<tr><td colspan="10" class="muted">Sin pedidos</td></tr>`;
+  }
+
+  /* ===== Producción ===== */
+  $('pr-desc').addEventListener('blur', ()=>{
+    const p=prodByAny(($('pr-desc').value||'').trim()); if(p){ $('pr-unidad').value=p.unidad||$('pr-unidad').value; $('pr-envase').value=p.envase||$('pr-envase').value; if(String(p.codigo).toLowerCase()===String($('pr-desc').value).toLowerCase()) $('pr-desc').value=p.descripcion; }
+  });
+  $('pr-crear').onclick = async ()=>{
+    if(!can('produccion')) return toast('Sin permiso');
+    const o = {
+      fecha:$('pr-fecha').value||new Date().toISOString().slice(0,10),
+      cliente:$('pr-cliente').value.trim(),
+      codigo_prod:null, prod_nombre:$('pr-desc').value.trim(),
+      cant:parseFloat($('pr-cant').value||0),
+      unidad:$('pr-unidad').value, envase:$('pr-envase').value.trim(),
+      ins:$('pr-insumo').value.trim(), ins_cant:parseFloat($('pr-insumo-cant').value||0),
+      estado:$('pr-estado').value, obs:$('pr-obs').value.trim()
+    };
+    if(!o.prod_nombre||!o.cant||!o.ins||!o.ins_cant) return toast('Completar producto/cant/insumo');
+    const pm = prodByAny(o.prod_nombre); if(pm){ o.codigo_prod=pm.codigo; o.prod_nombre=pm.descripcion; o.unidad=o.unidad||pm.unidad; o.envase=o.envase||pm.envase; }
+    const row=cache.stock[o.ins]; if(!row || (Number(row.qty)||0) < Number(o.ins_cant||0)) return toast('Stock insuficiente');
+    await sbConsumeStock(o.ins, o.ins_cant, 'Consumo producción'); /* descuenta al crear, cualquier estado */
+    const org=cache.org.id;
+    const { data:insOP, error } = await supabase.from('produccion').insert({ org_id:org, ...o, consumo_aplicado:o.ins_cant }).select().single();
+    if(error) return toast(error.message);
+    if(o.estado==='Terminado') await upsertResumenFromOP(insOP);
+    await loadAll(); renderProduccion(); renderStock(); renderHistorial(); renderResumen(); toast('Orden creada');
+  };
+  async function upsertResumenFromOP(o){
+    const org=cache.org.id;
+    const prodNombre = o.prod_nombre || (o.codigo_prod ? (cache.products.find(p=>p.codigo===o.codigo_prod)?.descripcion || '') : '');
+    const payload = { org_id:org, id_op:o.id, fecha:o.fecha, cliente:o.cliente, prod_nombre:prodNombre, codigo_prod:o.codigo_prod||null, cant:o.cant, unidad:o.unidad, envase:o.envase, obs:o.obs };
+    const { data:exists } = await supabase.from('resumen').select('id').eq('org_id',org).eq('id_op',o.id).maybeSingle();
+    if(exists) await supabase.from('resumen').update(payload).eq('id',exists.id);
+    else await supabase.from('resumen').insert(payload);
+  }
+  async function markOPTerminado(id){
+    if(!can('produccion_terminar')) return toast('Sin permiso');
+    const { data:o } = await supabase.from('produccion').select('*').eq('id',id).maybeSingle();
+    if(!o) return; if(o.estado==='Terminado') return toast('Ya terminada');
+    await supabase.from('produccion').update({ estado:'Terminado' }).eq('id',id);
+    await upsertResumenFromOP(o); await loadAll(); renderProduccion(); renderResumen(); toast('Orden migrada');
+  }
+  function delOP(id){ return async ()=>{
+    const o=cache.prod.find(x=>x.id===id); if(!o) return;
+    if(o.consumo_aplicado){ await sbUpsertStock({ codigo:o.ins, descripcion:cache.stock[o.ins]?.descripcion||'', unidad:cache.stock[o.ins]?.unidad||'', delta:o.consumo_aplicado, motivo:`Reverso consumo ${id}` }); }
+    await supabase.from('produccion').delete().eq('id',id);
+    await supabase.from('resumen').delete().eq('id_op',id);
+    await loadAll(); renderProduccion(); renderResumen(); renderStock(); renderHistorial(); toast('Orden borrada');
+  }; }
+  function renderProduccion(){
+    const tbody=document.querySelector('#tbl-prod tbody');
+    const rows = cache.prod.map(o=>`
+      <tr>
+        <td>${o.fecha}</td><td>${o.cliente||'-'}</td>
+        <td>${o.prod_nombre||''}${o.codigo_prod?` <span class="muted">(${o.codigo_prod})</span>`:''}</td>
+        <td>${o.cant}</td><td>${o.unidad||''}</td><td>${o.envase||''}</td>
+        <td>${o.ins}</td><td>${o.ins_cant}</td>
+        <td><span class="tag">${o.estado}</span></td>
+        <td class="right">
+          ${can('produccion_terminar')&&o.estado==='En proceso'?`<button class="ok" onclick="markOPTerminado('${o.id}')">Terminar</button>`:''}
+          <button class="ghost" onclick="(${delOP.toString()})('${o.id}')()">Borrar</button>
+        </td>
+      </tr>
+    `).join('');
+    tbody.innerHTML = rows || `<tr><td colspan="10" class="muted">Sin órdenes</td></tr>`;
+  }
+
+  /* ===== Resumen / Remito ===== */
+  function filtroResumen(){
+    const cli=($('f-cli').value||'').toLowerCase(), d1=$('f-desde').value||null, d2=$('f-hasta').value||null;
+    return cache.resumen.filter(o => (cli?(o.cliente||'').toLowerCase().includes(cli):true) && (d1?(o.fecha>=d1):true) && (d2?(o.fecha<=d2):true));
+  }
+  async function setPrecio(id_op, val){
+    const n = parseFloat((val||'').toString().replace(',','.')); const org=cache.org.id;
+    const { data:row } = await supabase.from('resumen').select('id').eq('org_id',org).eq('id_op',id_op).maybeSingle();
+    if(!row) return toast('No existe en resumen');
+    await supabase.from('resumen').update({ precio_total: (isNaN(n)?null:n) }).eq('id',row.id);
+    await loadAll(); renderResumen();
+  }
+  function delResumen(idx){ return async ()=>{
+    if(!can('resumen_borrar')) return toast('Sin permiso');
+    const r = filtroResumen()[idx]; if(!r) return;
+    await supabase.from('resumen').delete().eq('id',r.id);
+    await loadAll(); renderResumen(); toast('Movimiento borrado');
+  }; }
+  function renderResumen(){
+    const tbody=document.querySelector('#tbl-resumen tbody');
+    const data=filtroResumen();
+    tbody.innerHTML = data.map((o,i)=>`
+      <tr>
+        <td>${o.fecha}</td><td>${o.cliente||'-'}</td><td>${o.prod_nombre||'-'}</td>
+        <td>${o.cant}</td><td>${o.unidad||''}</td><td>${o.envase||''}</td>
+        <td><div class="pricecell"><input type="number" class="num" min="0" step="0.01" value="${o.precio_total!=null?fmt2(o.precio_total):''}" placeholder="0.00" onblur="setPrecio('${o.id_op}', this.value)" onkeydown="if(event.key==='Enter'){setPrecio('${o.id_op}', this.value);}"/><button class="ok" onclick="setPrecio('${o.id_op}', this.previousElementSibling.value)">OK</button></div></td>
+        <td>${o.obs||''}</td><td class="right">${can('resumen_borrar')?`<button class="ghost" onclick="(${delResumen.toString()})(${i})()">Borrar</button>`:''}</td>
+      </tr>
+    `).join('') || `<tr><td colspan="9" class="muted">Sin resultados</td></tr>`;
+    const total = data.reduce((a,x)=>a+(+x.precio_total||0),0); $('res-total').textContent = fmt2(total);
+    $('btn-print').style.display = can('resumen_print')?'inline-block':'none';
+  }
+  ['f-cli','f-desde','f-hasta'].forEach(id=>$(id).addEventListener('input', renderResumen));
+  $('f-limpiar').onclick = ()=>{ ['f-cli','f-desde','f-hasta'].forEach(i=>$(i).value=''); renderResumen(); };
+  $('btn-print').onclick = ()=>{
+    if(!can('resumen_print')) return toast('Sin permiso');
+    const data=filtroResumen(); if(!data.length) return toast('Sin datos');
+    const cliente=($('f-cli').value||'').trim(), d1=$('f-desde').value||'', d2=$('f-hasta').value||'', total=data.reduce((a,x)=>a+(+x.precio_total||0),0);
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito</title><style>body{font-family:Arial;margin:28px;color:#111}h1{margin:0 0 6px;font-size:22px}.sub{color:#444;font-size:12px;margin-bottom:12px}.meta{display:flex;justify-content:space-between;margin:12px 0 16px;font-size:14px}.box{border:1px solid #ccc;padding:10px;border-radius:8px}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5;text-align:left}.right{text-align:right}.total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}@media print{@page{size:A4 portrait;margin:20mm}}</style></head><body>
+    <h1>Remito – Tu PyME</h1><div class="sub">Generado ${new Date().toLocaleString()}</div>
+    <div class="meta"><div class="box"><div><b>Cliente:</b> ${escapeHtml(cliente||'Varios')}</div><div><b>Rango:</b> ${d1||'—'} a ${d2||'—'}</div></div><div class="box"><div><b>N°:</b> REM-${Date.now()}</div></div></div>
+    <table><thead><tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Total</th><th>Obs</th></tr></thead><tbody>${
+      data.map(o=>`<tr><td>${o.fecha}</td><td>${escapeHtml(o.prod_nombre||'')}</td><td class="right">${o.cant}</td><td>${escapeHtml(o.unidad||'')}</td><td>${escapeHtml(o.envase||'')}</td><td class="right">${fmt2(o.precio_total||0)}</td><td>${escapeHtml(o.obs||'')}</td></tr>`).join('')
+    }</tbody></table><div class="total">TOTAL: $ ${fmt2(total)}</div><script>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script></body></html>`;
+    const w=window.open('','_blank'); w.document.open(); w.document.write(html); w.document.close();
+  };
+
+  /* ===== Pendientes ===== */
+  function getPendientes(){
+    const prov=($('pp-prov').value||'').toLowerCase(), d1=$('pp-desde').value||null, d2=$('pp-hasta').value||null;
+    return cache.pedidos
+      .filter(p=>p.estado!=='Entregado' && p.estado!=='Cancelado')
+      .filter(p=>prov?(p.prov||'').toLowerCase().includes(prov):true)
+      .filter(p=>(d1?p.fecha>=d1:true) && (d2?p.fecha<=d2:true));
+  }
+  function renderPendientes(){
+    const data=getPendientes();
+    const proveedores=new Set(data.map(x=>x.prov||'')); $('pp-kpi-pend').textContent=data.length;
+    $('pp-kpi-monto').textContent=fmt2(data.reduce((a,p)=>a+(+p.precio||0)*(+p.cant||0),0)); $('pp-kpi-prov').textContent=proveedores.size;
+    const tbody=document.querySelector('#tbl-pendientes tbody');
+    tbody.innerHTML = data.map(p=>{
+      const recibido=(p.recibido!=null?+p.recibido:0), pendiente=Math.max(0,(+p.cant||0)-recibido), subtotal=(+p.precio||0)*(+p.cant||0);
+      return `<tr>
+        <td>${p.fecha}</td><td>${p.prov||''}</td><td>${p.codigo}</td><td>${p.descripcion||''}</td>
+        <td>${p.cant}</td>
+        <td><input type="number" class="num" min="0" step="0.01" value="${p.recibido??''}" placeholder="${p.cant}" oninput="(${setPedidoRecibido.toString()})('${p.id}')(this.value)"></td>
+        <td>${fmt2(pendiente)}</td><td>${p.unidad||''}</td><td>${p.precio!=null?fmt2(+p.precio):'-'}</td><td>${fmt2(subtotal)}</td>
+        <td class="right">${can('pedidos_entregar')?`<button class="ok" onclick="markPedidoEntregado('${p.id}')">Entregado</button>`:''}</td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="11" class="muted">Sin pendientes</td></tr>`;
+  }
+  ['pp-prov','pp-desde','pp-hasta'].forEach(id=>$(id).addEventListener('input', renderPendientes));
+  $('pp-limpiar').onclick = ()=>{ ['pp-prov','pp-desde','pp-hasta'].forEach(i=>$(i).value=''); renderPendientes(); };
+  $('pp-print').onclick = ()=>{
+    const data=getPendientes(); if(!data.length) return toast('Sin datos');
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Pendientes</title><style>body{font-family:Arial;margin:28px;color:#111}h1{margin:0 0 6px;font-size:22px}.sub{color:#444;font-size:12px;margin-bottom:12px}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5;text-align:left}.right{text-align:right}@media print{@page{size:A4;margin:18mm}}</style></head><body>
+    <h1>Pendientes de compra – Tu PyME</h1><div class="sub">Generado ${new Date().toLocaleString()}</div>
+    <table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Código</th><th>Descripción</th><th>Pedida</th><th>Recibido</th><th>Pendiente</th><th>Unidad</th><th>Precio</th><th>Subtotal</th></tr></thead><tbody>${
+      data.map(p=>`<tr><td>${p.fecha}</td><td>${p.prov||''}</td><td>${p.codigo}</td><td>${p.descripcion||''}</td><td class="right">${p.cant}</td><td class="right">${p.recibido??''}</td><td class="right">${fmt2(Math.max(0,(+p.cant||0)-(+p.recibido||0)))}</td><td>${p.unidad||''}</td><td class="right">${fmt2(+p.precio||0)}</td><td class="right">${fmt2((+p.precio||0)*(+p.cant||0))}</td></tr>`).join('')
+    }</tbody></table><script>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script></body></html>`;
+    const w=window.open('','_blank'); w.document.open(); w.document.write(html); w.document.close();
+  };
+
+  /* ===== Usuarios ===== */
+  async function renderUsers(){
+    if(!can('usuarios')){ $('tab-usuarios').style.display='none'; return; }
+    const org=cache.org.id;
+    const { data:users=[] } = await supabase.from('profiles').select('*').eq('org_id',org);
+    cache.users=users;
+    const tbody=document.querySelector('#tbl-users tbody');
+    tbody.innerHTML = users.map(u=>`
+      <tr><td>${u.user_id}</td><td>${u.name||''}</td><td>${u.role}</td><td>${(u.perms||[]).join(', ')}</td></tr>
+    `).join('') || `<tr><td colspan="4" class="muted">Sin usuarios</td></tr>`;
+  }
+  $('u-refresh').onclick = renderUsers;
+  $('u-guardar').onclick = async ()=>{
+    if(!can('usuarios')) return toast('Sin permiso');
+    const user_id=$('u-id').value.trim(), name=$('u-name').value.trim(), role=$('u-role').value, perms=($('u-perms').value||'').split(',').map(x=>x.trim()).filter(Boolean);
+    if(!user_id||!name) return toast('User ID y nombre');
+    const { data:org } = await supabase.from('orgs').select('owner').eq('id',cache.org.id).single();
+    const { data:{ user } } = await supabase.auth.getUser();
+    if(org.owner!==user.id) return toast('Solo el dueño de la organización puede editar usuarios');
+    const { data:exists } = await supabase.from('profiles').select('user_id').eq('user_id',user_id).maybeSingle();
+    if(exists) await supabase.from('profiles').update({ name, role, perms, org_id:cache.org.id }).eq('user_id',user_id);
+    else await supabase.from('profiles').insert({ user_id, name, role, perms, org_id:cache.org.id });
+    await renderUsers(); toast('Perfil guardado');
+  };
+
+  /* ===== Tabs ===== */
+  function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forEach(s=>s.style.display='none'); document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active')); const btn=document.querySelector(`.tab[data-tab="${tab}"]`); const sec=$('tab-'+tab); if(btn&&sec&&btn.style.display!=='none'){ btn.classList.add('active'); sec.style.display='block'; } }
+  $('tabsBar').addEventListener('click',(e)=>{ if(e.target.classList.contains('tab')) activateTab(e.target.dataset.tab); });
+
+  /* ===== INIT ===== */
+  (async ()=>{ const { data:{ session } } = await supabase.auth.getSession(); if(session?.user){ await ensureBootstrap(session.user); await afterAuth(session.user); } else { showLogin(); } })();
+  </script>
+</body>
+</html>
