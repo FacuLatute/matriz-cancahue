@@ -44,47 +44,8 @@
     #loginView{max-width:420px;margin:12vh auto;padding:16px}
     .link{color:#a78bfa;cursor:pointer;text-decoration:underline}
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <script>
-  const { createClient } = window.supabase;
-  const SUPABASE_URL = "https://zxbzjdobgrlabbfqwsag.supabase.co";
-  const SUPABASE_ANON_KEY = "tu_anon_key"; 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
-  const $ = id => document.getElementById(id);
-
-  $('btn-login').onclick = async () => {
-    const email = $('lg-email').value.trim();
-    const pass = $('lg-pass').value;
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
-    if (error) { console.error("login error", error); alert(error.message); return; }
-    console.log("login OK", data);
-    document.getElementById("loginView").style.display = "none";
-    document.getElementById("app").style.display = "block";
-    document.getElementById("whoami").textContent = email;
-  };
-
-  $('btn-signup').onclick = async () => {
-    const email = $('lg-email').value.trim();
-    const pass = $('lg-pass').value;
-    const { data, error } = await supabase.auth.signUp({ email, password: pass });
-    if (error) { console.error("signup error", error); alert(error.message); return; }
-    alert("Cuenta creada. Revisá tu mail si pediste confirmación, luego podés entrar.");
-  };
-
-  $('btn-reset').onclick = async () => {
-    const email = $('lg-email').value.trim();
-    if (!email) { alert("Poné tu email primero"); return; }
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
-    alert(error ? error.message : "Te mandamos un mail para resetear tu clave.");
-  };
-
-  $('btn-logout').onclick = async () => {
-    await supabase.auth.signOut();
-    document.getElementById("app").style.display = "none";
-    document.getElementById("loginView").style.display = "block";
-  };
-</script>
 </head>
 <body>
   <header id="appHeader" style="display:none">
@@ -97,6 +58,21 @@
   </header>
 
   <div id="toast"></div>
+
+  <!-- ===== LOGIN ===== -->
+  <div id="loginView" class="card">
+    <h2>Ingresar</h2>
+    <div class="grid">
+      <div><label>Email</label><input id="lg-email" placeholder="correo@empresa.com" autocomplete="username" /></div>
+      <div><label>Contraseña</label><input id="lg-pass" type="password" placeholder="••••••" autocomplete="current-password" /></div>
+    </div>
+    <div class="right" style="margin-top:10px;gap:8px">
+      <button class="ghost" id="btn-signup">Crear cuenta</button>
+      <button class="primary" id="btn-login">Entrar</button>
+    </div>
+    <div class="muted" style="margin-top:8px">¿Olvidaste tu clave? <span id="btn-reset" class="link">Restablecer</span></div>
+  </div>
+
   <!-- ===== APP ===== -->
   <div id="app" class="wrap" style="display:none">
     <div class="tabs" id="tabsBar">
@@ -670,7 +646,6 @@
   </script>
 </body>
 </html>
-
 
 
 
