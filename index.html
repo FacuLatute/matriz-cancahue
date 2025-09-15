@@ -644,7 +644,23 @@
   /* ===== INIT ===== */
   (async ()=>{ const { data:{ session } } = await supabase.auth.getSession(); if(session?.user){ await ensureBootstrap(session.user); await afterAuth(session.user); } else { showLogin(); } })();
   </script>
+  <script>
+// Al cerrar la pestaña/ventana
+window.addEventListener("beforeunload", async () => {
+  // Forzar logout de Supabase
+  await supabase.auth.signOut();
+  // Limpiar cache local de supabase
+  localStorage.removeItem('supabase.auth.token');
+  sessionStorage.removeItem('supabase.auth.token');
+  // Limpiar todos los datos locales
+  localStorage.clear();
+  sessionStorage.clear();
+  document.cookie.split(";").forEach(c => {
+    document.cookie = c.trim().split("=")[0] + "=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/";
+  });
+});
+</script>
+
 </body>
 </html>
-
 
