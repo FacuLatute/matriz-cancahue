@@ -98,6 +98,13 @@
         <div><label>Unidad</label><select id="p-unidad"><option>kg</option><option>unid</option><option>bandejas</option><option>paquetes</option></select></div>
         <div><label>Precio unitario</label><input id="p-precio" class="num" type="number" min="0" step="0.01" /></div>
         <div><label>Estado</label><select id="p-estado"><option>Pendiente</option><option>Entregado</option><option>Cancelado</option></select></div>
+
+        <!-- NUEVOS CAMPOS -->
+        <div><label>Cantidad Bulto</label><input id="p-bulto" class="num" type="number" min="0" step="0.01" /></div>
+        <div><label>Calidad</label><input id="p-calidad" /></div>
+        <div><label>Envase</label><input id="p-envase" /></div>
+        <div><label>Kg</label><input id="p-kg" class="num" type="number" min="0" step="0.01" /></div>
+        <div><label>Respa</label><input id="p-respa" /></div>
       </div>
       <div class="right" style="margin-top:10px">
         <button class="ghost" id="p-limpiar">Limpiar</button>
@@ -105,7 +112,9 @@
       </div>
       <table id="tbl-pedidos"><thead><tr>
         <th>Fecha</th><th>Código</th><th>Descripción</th><th>Prov.</th>
-        <th>Pedida</th><th>Recibido</th><th>Unidad</th><th>Precio</th><th>Estado</th><th></th>
+        <th>Pedida</th><th>Recibido</th><th>Unidad</th><th>Precio</th>
+        <th>Cant. Bulto</th><th>Calidad</th><th>Envase</th><th>Kg</th><th>Respa</th>
+        <th>Estado</th><th></th>
       </tr></thead><tbody></tbody></table>
     </section>
 
@@ -147,10 +156,18 @@
         <div><label>Consumo</label><input id="pr-insumo-cant" type="number" min="0" step="0.01" /></div>
         <div><label>Estado</label><select id="pr-estado"><option>En proceso</option><option>Terminado</option></select></div>
         <div style="grid-column:1/-1"><label>Observaciones</label><input id="pr-obs" /></div>
+
+        <!-- NUEVOS CAMPOS -->
+        <div><label>Cantidad Bulto</label><input id="pr-bulto" type="number" min="0" step="0.01" /></div>
+        <div><label>Calidad</label><input id="pr-calidad" /></div>
+        <div><label>Kg</label><input id="pr-kg" type="number" min="0" step="0.01" /></div>
+        <div><label>Respa</label><input id="pr-respa" /></div>
       </div>
       <div class="right" style="margin-top:10px"><button class="primary" id="pr-crear">Crear orden</button></div>
       <table id="tbl-prod"><thead><tr>
-        <th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Insumo</th><th>Consumo</th><th>Estado</th><th></th>
+        <th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Insumo</th><th>Consumo</th>
+        <th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th>
+        <th>Estado</th><th></th>
       </tr></thead><tbody></tbody></table>
     </section>
 
@@ -165,7 +182,9 @@
         <div class="right" style="align-items:end"><button class="primary" id="btn-print">Imprimir Remito</button></div>
       </div>
       <table id="tbl-resumen"><thead><tr>
-        <th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Venta Total</th><th>Obs</th><th></th>
+        <th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Venta Total</th>
+        <th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th>
+        <th>Obs</th><th></th>
       </tr></thead><tbody></tbody></table>
       <div class="totalbar">Total filtrado: $ <span id="res-total">0.00</span></div>
     </section>
@@ -187,7 +206,9 @@
       </div>
       <table id="tbl-pendientes"><thead><tr>
         <th>Fecha</th><th>Proveedor</th><th>Código</th><th>Descripción</th>
-        <th>Pedida</th><th>Recibido</th><th>Pendiente</th><th>Unidad</th><th>Precio</th><th>Subtotal</th><th>Acciones</th>
+        <th>Pedida</th><th>Recibido</th><th>Pendiente</th><th>Unidad</th><th>Precio</th><th>Subtotal</th>
+        <th>Cant. Bulto</th><th>Calidad</th><th>Envase</th><th>Kg</th><th>Respa</th>
+        <th>Acciones</th>
       </tr></thead><tbody></tbody></table>
     </section>
 
@@ -374,7 +395,7 @@
   function renderStock(){
     const tbody=document.querySelector('#tbl-stock tbody');
     const rows = Object.entries(cache.stock)
-      .filter(([c,s])=>(Number(s.qty)||0)>0) /* ocultar 0 */
+      .filter(([c,s])=>(Number(s.qty)||0)>0)
       .map(([c,s])=>{
         const alert = (s.repo && (Number(s.qty)||0)<=s.repo) ? '⚠️ Bajo' : '';
         return `<tr><td>${c}</td><td>${s.descripcion||''}</td><td>${fmt2(+s.qty||0)}</td><td>${s.unidad||''}</td>
@@ -395,7 +416,12 @@
   /* ===== Pedidos ===== */
   $('p-codigo').addEventListener('blur', ()=>{
     const p=prodByCode(($('p-codigo').value||'').trim().toLowerCase());
-    if(p){ $('p-descripcion').value=p.descripcion||$('p-descripcion').value; $('p-unidad').value=p.unidad||$('p-unidad').value; }
+    if(p){
+      $('p-descripcion').value=p.descripcion||$('p-descripcion').value;
+      $('p-unidad').value=p.unidad||$('p-unidad').value;
+      // si el producto tiene envase, autocompletamos
+      if(p.envase) $('p-envase').value = p.envase;
+    }
   });
   $('p-crear').onclick = async ()=>{
     if(!can('pedidos')) return toast('Sin permiso');
@@ -407,10 +433,16 @@
       cant: parseFloat($('p-cant').value||0),
       recibido: null, recibido_aplicado: 0,
       unidad: $('p-unidad').value, precio: parseFloat($('p-precio').value||0),
-      estado: $('p-estado').value
+      estado: $('p-estado').value,
+      // nuevos campos
+      bulto: parseFloat($('p-bulto').value||0),
+      calidad: $('p-calidad').value.trim(),
+      envase: $('p-envase').value.trim(),
+      kg: parseFloat($('p-kg').value||0),
+      respa: $('p-respa').value.trim()
     };
     if(!pedido.codigo || !pedido.cant) return toast('Código y cantidad');
-    const prod=prodByCode(pedido.codigo); if(prod){ if(!pedido.descripcion) pedido.descripcion=prod.descripcion; if(!pedido.unidad) pedido.unidad=prod.unidad; }
+    const prod=prodByCode(pedido.codigo); if(prod){ if(!pedido.descripcion) pedido.descripcion=prod.descripcion; if(!pedido.unidad) pedido.unidad=prod.unidad; if(!pedido.envase) pedido.envase=prod.envase||''; }
     const org=cache.org.id;
     const { error } = await supabase.from('pedidos').insert({ org_id:org, ...pedido });
     if(error) return toast(error.message);
@@ -421,7 +453,7 @@
     }
     await loadAll(); renderPedidos(); renderStock(); renderHistorial(); renderPendientes(); toast('Pedido creado');
   };
-  $('p-limpiar').onclick = ()=>{ ['p-fecha','p-codigo','p-descripcion','p-proveedor','p-cant','p-precio'].forEach(i=>$(i).value=''); $('p-estado').value='Pendiente'; };
+  $('p-limpiar').onclick = ()=>{ ['p-fecha','p-codigo','p-descripcion','p-proveedor','p-cant','p-precio','p-bulto','p-calidad','p-envase','p-kg','p-respa'].forEach(i=>$(i).value=''); $('p-estado').value='Pendiente'; };
 
   function setPedidoRecibido(id){ return async (val)=>{
     const rec = (val===''?null:Math.max(0,parseFloat(val||0)));
@@ -455,13 +487,18 @@
         <td>${p.cant}</td>
         <td><input type="number" class="num" min="0" step="0.01" value="${p.recibido??''}" placeholder="${p.cant}" oninput="(${setPedidoRecibido.toString()})('${p.id}')(this.value)"></td>
         <td>${p.unidad||'-'}</td><td>${p.precio!=null?fmt2(p.precio):'-'}</td>
+        <td>${p.bulto!=null?fmt2(p.bulto):'-'}</td>
+        <td>${p.calidad||'-'}</td>
+        <td>${p.envase||'-'}</td>
+        <td>${p.kg!=null?fmt2(p.kg):'-'}</td>
+        <td>${p.respa||'-'}</td>
         <td><span class="tag">${p.estado}</span></td>
         <td class="right">
           ${can('pedidos_entregar')?`<button class="ok" onclick="markPedidoEntregado('${p.id}')">Entregado</button>`:''}
           <button class="ghost" onclick="(${delPedido.toString()})('${p.id}')()">Borrar</button>
         </td>
       </tr>
-    `).join('') || `<tr><td colspan="10" class="muted">Sin pedidos</td></tr>`;
+    `).join('') || `<tr><td colspan="15" class="muted">Sin pedidos</td></tr>`;
   }
 
   /* ===== Producción ===== */
@@ -477,7 +514,12 @@
       cant:parseFloat($('pr-cant').value||0),
       unidad:$('pr-unidad').value, envase:$('pr-envase').value.trim(),
       ins:$('pr-insumo').value.trim(), ins_cant:parseFloat($('pr-insumo-cant').value||0),
-      estado:$('pr-estado').value, obs:$('pr-obs').value.trim()
+      estado:$('pr-estado').value, obs:$('pr-obs').value.trim(),
+      // nuevos campos
+      bulto: parseFloat($('pr-bulto').value||0),
+      calidad: $('pr-calidad').value.trim(),
+      kg: parseFloat($('pr-kg').value||0),
+      respa: $('pr-respa').value.trim()
     };
     if(!o.prod_nombre||!o.cant||!o.ins||!o.ins_cant) return toast('Completar producto/cant/insumo');
     const pm = prodByAny(o.prod_nombre); if(pm){ o.codigo_prod=pm.codigo; o.prod_nombre=pm.descripcion; o.unidad=o.unidad||pm.unidad; o.envase=o.envase||pm.envase; }
@@ -492,7 +534,15 @@
   async function upsertResumenFromOP(o){
     const org=cache.org.id;
     const prodNombre = o.prod_nombre || (o.codigo_prod ? (cache.products.find(p=>p.codigo===o.codigo_prod)?.descripcion || '') : '');
-    const payload = { org_id:org, id_op:o.id, fecha:o.fecha, cliente:o.cliente, prod_nombre:prodNombre, codigo_prod:o.codigo_prod||null, cant:o.cant, unidad:o.unidad, envase:o.envase, obs:o.obs };
+    const payload = {
+      org_id:org, id_op:o.id, fecha:o.fecha, cliente:o.cliente, prod_nombre:prodNombre, codigo_prod:o.codigo_prod||null,
+      cant:o.cant, unidad:o.unidad, envase:o.envase, obs:o.obs,
+      // nuevos campos a resumen
+      bulto: o.bulto ?? null,
+      calidad: o.calidad ?? null,
+      kg: o.kg ?? null,
+      respa: o.respa ?? null
+    };
     const { data:exists } = await supabase.from('resumen').select('id').eq('org_id',org).eq('id_op',o.id).maybeSingle();
     if(exists) await supabase.from('resumen').update(payload).eq('id',exists.id);
     else await supabase.from('resumen').insert(payload);
@@ -519,6 +569,10 @@
         <td>${o.prod_nombre||''}${o.codigo_prod?` <span class="muted">(${o.codigo_prod})</span>`:''}</td>
         <td>${o.cant}</td><td>${o.unidad||''}</td><td>${o.envase||''}</td>
         <td>${o.ins}</td><td>${o.ins_cant}</td>
+        <td>${o.bulto!=null?fmt2(o.bulto):'-'}</td>
+        <td>${o.calidad||'-'}</td>
+        <td>${o.kg!=null?fmt2(o.kg):'-'}</td>
+        <td>${o.respa||'-'}</td>
         <td><span class="tag">${o.estado}</span></td>
         <td class="right">
           ${can('produccion_terminar')&&o.estado==='En proceso'?`<button class="ok" onclick="markOPTerminado('${o.id}')">Terminar</button>`:''}
@@ -526,7 +580,7 @@
         </td>
       </tr>
     `).join('');
-    tbody.innerHTML = rows || `<tr><td colspan="10" class="muted">Sin órdenes</td></tr>`;
+    tbody.innerHTML = rows || `<tr><td colspan="14" class="muted">Sin órdenes</td></tr>`;
   }
 
   /* ===== Resumen / Remito ===== */
@@ -555,9 +609,13 @@
         <td>${o.fecha}</td><td>${o.cliente||'-'}</td><td>${o.prod_nombre||'-'}</td>
         <td>${o.cant}</td><td>${o.unidad||''}</td><td>${o.envase||''}</td>
         <td><div class="pricecell"><input type="number" class="num" min="0" step="0.01" value="${o.precio_total!=null?fmt2(o.precio_total):''}" placeholder="0.00" onblur="setPrecio('${o.id_op}', this.value)" onkeydown="if(event.key==='Enter'){setPrecio('${o.id_op}', this.value);}"/><button class="ok" onclick="setPrecio('${o.id_op}', this.previousElementSibling.value)">OK</button></div></td>
+        <td>${o.bulto!=null?fmt2(o.bulto):'-'}</td>
+        <td>${o.calidad||'-'}</td>
+        <td>${o.kg!=null?fmt2(o.kg):'-'}</td>
+        <td>${o.respa||'-'}</td>
         <td>${o.obs||''}</td><td class="right">${can('resumen_borrar')?`<button class="ghost" onclick="(${delResumen.toString()})(${i})()">Borrar</button>`:''}</td>
       </tr>
-    `).join('') || `<tr><td colspan="9" class="muted">Sin resultados</td></tr>`;
+    `).join('') || `<tr><td colspan="13" class="muted">Sin resultados</td></tr>`;
     const total = data.reduce((a,x)=>a+(+x.precio_total||0),0); $('res-total').textContent = fmt2(total);
     $('btn-print').style.display = can('resumen_print')?'inline-block':'none';
   }
@@ -570,8 +628,8 @@
     const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito</title><style>body{font-family:Arial;margin:28px;color:#111}h1{margin:0 0 6px;font-size:22px}.sub{color:#444;font-size:12px;margin-bottom:12px}.meta{display:flex;justify-content:space-between;margin:12px 0 16px;font-size:14px}.box{border:1px solid #ccc;padding:10px;border-radius:8px}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5;text-align:left}.right{text-align:right}.total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}@media print{@page{size:A4 portrait;margin:20mm}}</style></head><body>
     <h1>Remito – Tu PyME</h1><div class="sub">Generado ${new Date().toLocaleString()}</div>
     <div class="meta"><div class="box"><div><b>Cliente:</b> ${escapeHtml(cliente||'Varios')}</div><div><b>Rango:</b> ${d1||'—'} a ${d2||'—'}</div></div><div class="box"><div><b>N°:</b> REM-${Date.now()}</div></div></div>
-    <table><thead><tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Total</th><th>Obs</th></tr></thead><tbody>${
-      data.map(o=>`<tr><td>${o.fecha}</td><td>${escapeHtml(o.prod_nombre||'')}</td><td class="right">${o.cant}</td><td>${escapeHtml(o.unidad||'')}</td><td>${escapeHtml(o.envase||'')}</td><td class="right">${fmt2(o.precio_total||0)}</td><td>${escapeHtml(o.obs||'')}</td></tr>`).join('')
+    <table><thead><tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead><tbody>${
+      data.map(o=>`<tr><td>${o.fecha}</td><td>${escapeHtml(o.prod_nombre||'')}</td><td class="right">${o.cant}</td><td>${escapeHtml(o.unidad||'')}</td><td>${escapeHtml(o.envase||'')}</td><td class="right">${fmt2(o.precio_total||0)}</td><td class="right">${o.bulto!=null?fmt2(o.bulto):''}</td><td>${escapeHtml(o.calidad||'')}</td><td class="right">${o.kg!=null?fmt2(o.kg):''}</td><td>${escapeHtml(o.respa||'')}</td><td>${escapeHtml(o.obs||'')}</td></tr>`).join('')
     }</tbody></table><div class="total">TOTAL: $ ${fmt2(total)}</div><script>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script></body></html>`;
     const w=window.open('','_blank'); w.document.open(); w.document.write(html); w.document.close();
   };
@@ -596,9 +654,14 @@
         <td>${p.cant}</td>
         <td><input type="number" class="num" min="0" step="0.01" value="${p.recibido??''}" placeholder="${p.cant}" oninput="(${setPedidoRecibido.toString()})('${p.id}')(this.value)"></td>
         <td>${fmt2(pendiente)}</td><td>${p.unidad||''}</td><td>${p.precio!=null?fmt2(+p.precio):'-'}</td><td>${fmt2(subtotal)}</td>
+        <td>${p.bulto!=null?fmt2(p.bulto):'-'}</td>
+        <td>${p.calidad||'-'}</td>
+        <td>${p.envase||'-'}</td>
+        <td>${p.kg!=null?fmt2(p.kg):'-'}</td>
+        <td>${p.respa||'-'}</td>
         <td class="right">${can('pedidos_entregar')?`<button class="ok" onclick="markPedidoEntregado('${p.id}')">Entregado</button>`:''}</td>
       </tr>`;
-    }).join('') || `<tr><td colspan="11" class="muted">Sin pendientes</td></tr>`;
+    }).join('') || `<tr><td colspan="16" class="muted">Sin pendientes</td></tr>`;
   }
   ['pp-prov','pp-desde','pp-hasta'].forEach(id=>$(id).addEventListener('input', renderPendientes));
   $('pp-limpiar').onclick = ()=>{ ['pp-prov','pp-desde','pp-hasta'].forEach(i=>$(i).value=''); renderPendientes(); };
@@ -606,8 +669,8 @@
     const data=getPendientes(); if(!data.length) return toast('Sin datos');
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Pendientes</title><style>body{font-family:Arial;margin:28px;color:#111}h1{margin:0 0 6px;font-size:22px}.sub{color:#444;font-size:12px;margin-bottom:12px}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5;text-align:left}.right{text-align:right}@media print{@page{size:A4;margin:18mm}}</style></head><body>
     <h1>Pendientes de compra – Tu PyME</h1><div class="sub">Generado ${new Date().toLocaleString()}</div>
-    <table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Código</th><th>Descripción</th><th>Pedida</th><th>Recibido</th><th>Pendiente</th><th>Unidad</th><th>Precio</th><th>Subtotal</th></tr></thead><tbody>${
-      data.map(p=>`<tr><td>${p.fecha}</td><td>${p.prov||''}</td><td>${p.codigo}</td><td>${p.descripcion||''}</td><td class="right">${p.cant}</td><td class="right">${p.recibido??''}</td><td class="right">${fmt2(Math.max(0,(+p.cant||0)-(+p.recibido||0)))}</td><td>${p.unidad||''}</td><td class="right">${fmt2(+p.precio||0)}</td><td class="right">${fmt2((+p.precio||0)*(+p.cant||0))}</td></tr>`).join('')
+    <table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Código</th><th>Descripción</th><th>Pedida</th><th>Recibido</th><th>Pendiente</th><th>Unidad</th><th>Precio</th><th>Subtotal</th><th>Bulto</th><th>Calidad</th><th>Envase</th><th>Kg</th><th>Respa</th></tr></thead><tbody>${
+      data.map(p=>`<tr><td>${p.fecha}</td><td>${p.prov||''}</td><td>${p.codigo}</td><td>${p.descripcion||''}</td><td class="right">${p.cant}</td><td class="right">${p.recibido??''}</td><td class="right">${fmt2(Math.max(0,(+p.cant||0)-(+p.recibido||0)))}</td><td>${p.unidad||''}</td><td class="right">${fmt2(+p.precio||0)}</td><td class="right">${fmt2((+p.precio||0)*(+p.cant||0))}</td><td class="right">${p.bulto!=null?fmt2(p.bulto):''}</td><td>${escapeHtml(p.calidad||'')}</td><td>${escapeHtml(p.envase||'')}</td><td class="right">${p.kg!=null?fmt2(p.kg):''}</td><td>${escapeHtml(p.respa||'')}</td></tr>`).join('')
     }</tbody></table><script>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script></body></html>`;
     const w=window.open('','_blank'); w.document.open(); w.document.write(html); w.document.close();
   };
@@ -644,23 +707,19 @@
   /* ===== INIT ===== */
   (async ()=>{ const { data:{ session } } = await supabase.auth.getSession(); if(session?.user){ await ensureBootstrap(session.user); await afterAuth(session.user); } else { showLogin(); } })();
   </script>
-  <script>
-// Al cerrar la pestaña/ventana
-window.addEventListener("beforeunload", async () => {
-  // Forzar logout de Supabase
-  await supabase.auth.signOut();
-  // Limpiar cache local de supabase
-  localStorage.removeItem('supabase.auth.token');
-  sessionStorage.removeItem('supabase.auth.token');
-  // Limpiar todos los datos locales
-  localStorage.clear();
-  sessionStorage.clear();
-  document.cookie.split(";").forEach(c => {
-    document.cookie = c.trim().split("=")[0] + "=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/";
-  });
-});
-</script>
 
+  <!-- ===== PARCHE: Limpiar sesión/cookies al cerrar pestaña/ventana ===== -->
+  <script>
+  window.addEventListener("beforeunload", async () => {
+    try { await supabase.auth.signOut(); } catch(e){}
+    localStorage.removeItem('supabase.auth.token');
+    sessionStorage.removeItem('supabase.auth.token');
+    localStorage.clear();
+    sessionStorage.clear();
+    document.cookie.split(";").forEach(c => {
+      document.cookie = c.trim().split("=")[0] + "=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/";
+    });
+  });
+  </script>
 </body>
 </html>
-
