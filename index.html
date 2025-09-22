@@ -44,8 +44,7 @@
     #loginView{max-width:420px;margin:12vh auto;padding:16px}
     .link{color:#a78bfa;cursor:pointer;text-decoration:underline}
   </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
   <header id="appHeader" style="display:none">
@@ -78,6 +77,7 @@
     <div class="tabs" id="tabsBar">
       <button class="tab" data-tab="pedidos">🧾 Pedidos</button>
       <button class="tab" data-tab="stock">📦 Stock</button>
+      <button class="tab" data-tab="envases">🧴 Envases</button>
       <button class="tab" data-tab="produccion">🏭 Producción</button>
       <button class="tab" data-tab="resumen">📄 Resumen</button>
       <button class="tab" data-tab="pendientes">📊 Pedidos pendientes</button>
@@ -129,6 +129,22 @@
       </tr></thead><tbody></tbody></table>
     </section>
 
+    <!-- ===== STOCK ENVASES ===== -->
+    <section class="card" id="tab-envases" style="display:none">
+      <h2>Control de stock de envases</h2>
+      <div class="right" style="margin-bottom:8px">
+        <button class="err" id="btn-reset-envases">Reiniciar envases (todo a 0)</button>
+      </div>
+      <table id="tbl-envases">
+        <thead>
+          <tr>
+            <th>Código</th><th>Descripción</th><th>Stock</th><th>Unidad</th><th>Pto. Reposición</th><th>Alerta</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
     <!-- ===== PRODUCTOS (CONFIG) ===== -->
     <section class="card" id="tab-productos" style="display:none">
       <h2>Catálogo de productos</h2>
@@ -140,6 +156,18 @@
       </div>
       <div class="right" style="margin-top:10px"><button class="primary" id="pd-agregar">Agregar producto</button></div>
       <table id="tbl-productos"><thead><tr><th>Código</th><th>Descripción</th><th>Unidad</th><th>Envase</th><th></th></tr></thead><tbody></tbody></table>
+
+      <h2 style="margin-top:20px">Catálogo de envases</h2>
+      <div class="grid">
+        <div><label>Código</label><input id="ev-codigo" /></div>
+        <div><label>Descripción</label><input id="ev-descripcion" /></div>
+        <div><label>Unidad</label><input id="ev-unidad" /></div>
+      </div>
+      <div class="right" style="margin-top:10px"><button class="primary" id="ev-agregar">Agregar envase</button></div>
+      <table id="tbl-envases-conf">
+        <thead><tr><th>Código</th><th>Descripción</th><th>Unidad</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
     </section>
 
     <!-- ===== PRODUCCIÓN ===== -->
@@ -246,7 +274,7 @@
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   /* ===== Estado / Helpers ===== */
-  const cache = { org:null, profile:null, perms:[], products:[], stock:{}, pedidos:[], prod:[], resumen:[], hist:[], users:[] };
+  const cache = { org:null, profile:null, perms:[], products:[], envases:[], stock:{}, pedidos:[], prod:[], resumen:[], hist:[], users:[] };
   const $ = id=>document.getElementById(id);
   const fmt2 = n => (isFinite(n)?Number(n).toFixed(2):'');
   function toast(m){ const t=$('toast'); t.style.display='block'; t.textContent=m; setTimeout(()=>t.style.display='none',2000); }
@@ -254,7 +282,7 @@
   const can = p => cache.perms.includes(p);
 
   /* ===== Login / Signup PARCHEADO (ensureBootstrap) ===== */
-  const ALL_PERMS = ['pedidos','stock','produccion','resumen','pendientes','historial','config','usuarios','stock_reset','pedidos_entregar','produccion_terminar','resumen_borrar','resumen_print'];
+  const ALL_PERMS = ['pedidos','stock','envases','produccion','resumen','pendientes','historial','config','usuarios','stock_reset','pedidos_entregar','produccion_terminar','resumen_borrar','resumen_print'];
 
   $('btn-login').onclick = async ()=>{
     const email=$('lg-email').value.trim(), pass=$('lg-pass').value;
@@ -302,29 +330,33 @@
     const { data:profile } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
     if(!profile){ toast('No tenés perfil. Pedí acceso al admin.'); showLogin(); return; }
     cache.profile = profile; cache.org={ id:profile.org_id }; cache.perms = profile.perms||[];
+    // si es admin y no tiene la nueva perm "envases", la agregamos en memoria para que vea la solapa
+    if(profile.role==='admin' && !cache.perms.includes('envases')) cache.perms.push('envases');
+
     $('whoami').textContent = user.email; const rc=$('roleChip'); rc.style.display='none'; rc.textContent=profile.role;
     document.querySelectorAll('.tab').forEach(b=>{ const tab=b.dataset.tab; b.style.display = cache.perms.includes(tab)?'inline-block':'none'; });
     $('btn-config').style.display = cache.perms.includes('config')?'inline-block':'none';
     showApp();
     await loadAll();
-    renderProductos(); renderStock(); renderPedidos(); renderProduccion(); renderResumen(); renderPendientes(); renderHistorial(); await renderUsers();
+    renderProductos(); renderEnvasesConf(); renderStock(); renderEnvasesStock(); renderPedidos(); renderProduccion(); renderResumen(); renderPendientes(); renderHistorial(); await renderUsers();
     const first = Array.from(document.querySelectorAll('.tab')).find(b=>b.style.display!=='none'); if(first) activateTab(first.dataset.tab);
   }
 
   /* ===== Carga de datos ===== */
   async function loadAll(){
     const org=cache.org.id;
-    const [{data:products=[]},{data:stockRows=[]},{data:pedidos=[]},{data:prod=[]},{data:resumen=[]},{data:hist=[]}] = await Promise.all([
+    const [{data:products=[]},{data:stockRows=[]},{data:pedidos=[]},{data:prod=[]},{data:resumen=[]},{data:hist=[]},{data:envases=[]}] = await Promise.all([
       supabase.from('products').select('*').eq('org_id',org),
       supabase.from('stock').select('*').eq('org_id',org),
       supabase.from('pedidos').select('*').eq('org_id',org).order('created_at',{ascending:false}),
       supabase.from('produccion').select('*').eq('org_id',org).order('created_at',{ascending:false}),
       supabase.from('resumen').select('*').eq('org_id',org).order('created_at',{ascending:false}),
       supabase.from('historial_stock').select('*').eq('org_id',org).order('fecha',{ascending:false}),
+      supabase.from('envases').select('*').eq('org_id',org)
     ]);
     cache.products=products;
     cache.stock=Object.fromEntries(stockRows.map(s=>[s.codigo,s]));
-    cache.pedidos=pedidos; cache.prod=prod; cache.resumen=resumen; cache.hist=hist;
+    cache.pedidos=pedidos; cache.prod=prod; cache.resumen=resumen; cache.hist=hist; cache.envases=envases;
   }
 
   /* ===== Productos ===== */
@@ -358,6 +390,35 @@
   }
   const prodByCode = c => cache.products.find(p=>(p.codigo||'').toLowerCase()===String(c||'').toLowerCase());
   const prodByAny = v => cache.products.find(p => (p.codigo||'').toLowerCase()===String(v||'').toLowerCase() || (p.descripcion||'').toLowerCase()===String(v||'').toLowerCase());
+
+  /* ===== Config: Envases (alta/baja) ===== */
+  $('ev-agregar').onclick = async ()=>{
+    if(!can('config')) return toast('Sin permiso');
+    const codigo=$('ev-codigo').value.trim(), descripcion=$('ev-descripcion').value.trim(), unidad=$('ev-unidad').value.trim();
+    if(!codigo||!descripcion) return toast('Código y descripción');
+    const org=cache.org.id;
+    const { data:exist } = await supabase.from('envases').select('id').eq('org_id',org).eq('codigo',codigo).maybeSingle();
+    if(exist) return toast('Código ya existe');
+    const { error } = await supabase.from('envases').insert({ org_id:org, codigo, descripcion, unidad });
+    if(error) return toast(error.message);
+    await loadAll(); renderEnvasesConf(); toast('Envase agregado'); ['ev-codigo','ev-descripcion','ev-unidad'].forEach(i=>$(i).value='');
+  };
+
+  function delEnvaseConf(code){ return async ()=>{
+    if(!can('config')) return toast('Sin permiso');
+    const org=cache.org.id; const row=cache.envases.find(e=>e.codigo===code); if(!row) return;
+    const { error } = await supabase.from('envases').delete().eq('id',row.id);
+    if(error) return toast(error.message); await loadAll(); renderEnvasesConf(); toast('Envase borrado');
+  }; }
+
+  function renderEnvasesConf(){
+    const tbody=document.querySelector('#tbl-envases-conf tbody');
+    if(!tbody) return; /* por si no está abierta config */
+    tbody.innerHTML = cache.envases.map(e=>`
+      <tr><td>${e.codigo}</td><td>${e.descripcion}</td><td>${e.unidad||''}</td>
+      <td class="right"><button class="ghost" onclick="(${delEnvaseConf.toString()})('${e.codigo}')()">Borrar</button></td></tr>
+    `).join('') || `<tr><td colspan="4" class="muted">Sin envases</td></tr>`;
+  }
 
   /* ===== Stock & Historial ===== */
   async function sbUpsertStock({codigo,descripcion,unidad,delta,motivo}){
@@ -413,13 +474,39 @@
     `).join('') || `<tr><td colspan="6" class="muted">Sin movimientos</td></tr>`;
   }
 
+  /* ===== Stock de Envases ===== */
+  $('btn-reset-envases').onclick = async ()=>{
+    if(!can('stock_reset')) return toast('Sin permiso');
+    const org=cache.org.id;
+    const { error } = await supabase.from('envases').update({ stock:0 }).eq('org_id',org);
+    if(error) return toast(error.message);
+    await loadAll(); renderEnvasesStock(); toast('Stock de envases reiniciado');
+  };
+  function setRepoEnvase(codigo){ return async (val)=>{
+    const row=cache.envases.find(e=>e.codigo===codigo); if(!row) return;
+    const { error } = await supabase.from('envases').update({ repo:Number(val)||0 }).eq('id',row.id);
+    if(error) return toast(error.message);
+    row.repo=Number(val)||0;
+  }; }
+  function renderEnvasesStock(){
+    const tbody=document.querySelector('#tbl-envases tbody');
+    const rows = cache.envases.map(e=>{
+      const alert = (e.repo && (Number(e.stock)||0)<=e.repo) ? '⚠️ Bajo' : '';
+      return `<tr>
+        <td>${e.codigo}</td><td>${e.descripcion}</td><td>${fmt2(+e.stock||0)}</td><td>${e.unidad||''}</td>
+        <td><input type="number" min="0" step="0.01" value="${e.repo||0}" style="width:110px" oninput="(${setRepoEnvase.toString()})('${e.codigo}')(this.value)"></td>
+        <td>${alert}</td>
+      </tr>`;
+    }).join('');
+    tbody.innerHTML = rows || `<tr><td colspan="6" class="muted">Sin envases</td></tr>`;
+  }
+
   /* ===== Pedidos ===== */
   $('p-codigo').addEventListener('blur', ()=>{
     const p=prodByCode(($('p-codigo').value||'').trim().toLowerCase());
     if(p){
       $('p-descripcion').value=p.descripcion||$('p-descripcion').value;
       $('p-unidad').value=p.unidad||$('p-unidad').value;
-      // si el producto tiene envase, autocompletamos
       if(p.envase) $('p-envase').value = p.envase;
     }
   });
@@ -434,7 +521,6 @@
       recibido: null, recibido_aplicado: 0,
       unidad: $('p-unidad').value, precio: parseFloat($('p-precio').value||0),
       estado: $('p-estado').value,
-      // nuevos campos
       bulto: parseFloat($('p-bulto').value||0),
       calidad: $('p-calidad').value.trim(),
       envase: $('p-envase').value.trim(),
@@ -515,7 +601,6 @@
       unidad:$('pr-unidad').value, envase:$('pr-envase').value.trim(),
       ins:$('pr-insumo').value.trim(), ins_cant:parseFloat($('pr-insumo-cant').value||0),
       estado:$('pr-estado').value, obs:$('pr-obs').value.trim(),
-      // nuevos campos
       bulto: parseFloat($('pr-bulto').value||0),
       calidad: $('pr-calidad').value.trim(),
       kg: parseFloat($('pr-kg').value||0),
@@ -524,7 +609,7 @@
     if(!o.prod_nombre||!o.cant||!o.ins||!o.ins_cant) return toast('Completar producto/cant/insumo');
     const pm = prodByAny(o.prod_nombre); if(pm){ o.codigo_prod=pm.codigo; o.prod_nombre=pm.descripcion; o.unidad=o.unidad||pm.unidad; o.envase=o.envase||pm.envase; }
     const row=cache.stock[o.ins]; if(!row || (Number(row.qty)||0) < Number(o.ins_cant||0)) return toast('Stock insuficiente');
-    await sbConsumeStock(o.ins, o.ins_cant, 'Consumo producción'); /* descuenta al crear, cualquier estado */
+    await sbConsumeStock(o.ins, o.ins_cant, 'Consumo producción');
     const org=cache.org.id;
     const { data:insOP, error } = await supabase.from('produccion').insert({ org_id:org, ...o, consumo_aplicado:o.ins_cant }).select().single();
     if(error) return toast(error.message);
@@ -537,7 +622,6 @@
     const payload = {
       org_id:org, id_op:o.id, fecha:o.fecha, cliente:o.cliente, prod_nombre:prodNombre, codigo_prod:o.codigo_prod||null,
       cant:o.cant, unidad:o.unidad, envase:o.envase, obs:o.obs,
-      // nuevos campos a resumen
       bulto: o.bulto ?? null,
       calidad: o.calidad ?? null,
       kg: o.kg ?? null,
@@ -584,55 +668,66 @@
   }
 
   /* ===== Resumen / Remito ===== */
-  function filtroResumen(){
-    const cli=($('f-cli').value||'').toLowerCase(), d1=$('f-desde').value||null, d2=$('f-hasta').value||null;
-    return cache.resumen.filter(o => (cli?(o.cliente||'').toLowerCase().includes(cli):true) && (d1?(o.fecha>=d1):true) && (d2?(o.fecha<=d2):true));
-  }
-  async function setPrecio(id_op, val){
-    const n = parseFloat((val||'').toString().replace(',','.')); const org=cache.org.id;
-    const { data:row } = await supabase.from('resumen').select('id').eq('org_id',org).eq('id_op',id_op).maybeSingle();
-    if(!row) return toast('No existe en resumen');
-    await supabase.from('resumen').update({ precio_total: (isNaN(n)?null:n) }).eq('id',row.id);
-    await loadAll(); renderResumen();
-  }
-  function delResumen(idx){ return async ()=>{
-    if(!can('resumen_borrar')) return toast('Sin permiso');
-    const r = filtroResumen()[idx]; if(!r) return;
-    await supabase.from('resumen').delete().eq('id',r.id);
-    await loadAll(); renderResumen(); toast('Movimiento borrado');
-  }; }
-  function renderResumen(){
-    const tbody=document.querySelector('#tbl-resumen tbody');
-    const data=filtroResumen();
-    tbody.innerHTML = data.map((o,i)=>`
-      <tr>
-        <td>${o.fecha}</td><td>${o.cliente||'-'}</td><td>${o.prod_nombre||'-'}</td>
-        <td>${o.cant}</td><td>${o.unidad||''}</td><td>${o.envase||''}</td>
-        <td><div class="pricecell"><input type="number" class="num" min="0" step="0.01" value="${o.precio_total!=null?fmt2(o.precio_total):''}" placeholder="0.00" onblur="setPrecio('${o.id_op}', this.value)" onkeydown="if(event.key==='Enter'){setPrecio('${o.id_op}', this.value);}"/><button class="ok" onclick="setPrecio('${o.id_op}', this.previousElementSibling.value)">OK</button></div></td>
-        <td>${o.bulto!=null?fmt2(o.bulto):'-'}</td>
-        <td>${o.calidad||'-'}</td>
-        <td>${o.kg!=null?fmt2(o.kg):'-'}</td>
-        <td>${o.respa||'-'}</td>
-        <td>${o.obs||''}</td><td class="right">${can('resumen_borrar')?`<button class="ghost" onclick="(${delResumen.toString()})(${i})()">Borrar</button>`:''}</td>
-      </tr>
-    `).join('') || `<tr><td colspan="13" class="muted">Sin resultados</td></tr>`;
-    const total = data.reduce((a,x)=>a+(+x.precio_total||0),0); $('res-total').textContent = fmt2(total);
-    $('btn-print').style.display = can('resumen_print')?'inline-block':'none';
-  }
-  ['f-cli','f-desde','f-hasta'].forEach(id=>$(id).addEventListener('input', renderResumen));
-  $('f-limpiar').onclick = ()=>{ ['f-cli','f-desde','f-hasta'].forEach(i=>$(i).value=''); renderResumen(); };
   $('btn-print').onclick = ()=>{
-    if(!can('resumen_print')) return toast('Sin permiso');
-    const data=filtroResumen(); if(!data.length) return toast('Sin datos');
-    const cliente=($('f-cli').value||'').trim(), d1=$('f-desde').value||'', d2=$('f-hasta').value||'', total=data.reduce((a,x)=>a+(+x.precio_total||0),0);
-    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito</title><style>body{font-family:Arial;margin:28px;color:#111}h1{margin:0 0 6px;font-size:22px}.sub{color:#444;font-size:12px;margin-bottom:12px}.meta{display:flex;justify-content:space-between;margin:12px 0 16px;font-size:14px}.box{border:1px solid #ccc;padding:10px;border-radius:8px}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5;text-align:left}.right{text-align:right}.total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}@media print{@page{size:A4 portrait;margin:20mm}}</style></head><body>
-    <h1>Remito – Tu PyME</h1><div class="sub">Generado ${new Date().toLocaleString()}</div>
-    <div class="meta"><div class="box"><div><b>Cliente:</b> ${escapeHtml(cliente||'Varios')}</div><div><b>Rango:</b> ${d1||'—'} a ${d2||'—'}</div></div><div class="box"><div><b>N°:</b> REM-${Date.now()}</div></div></div>
-    <table><thead><tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead><tbody>${
-      data.map(o=>`<tr><td>${o.fecha}</td><td>${escapeHtml(o.prod_nombre||'')}</td><td class="right">${o.cant}</td><td>${escapeHtml(o.unidad||'')}</td><td>${escapeHtml(o.envase||'')}</td><td class="right">${fmt2(o.precio_total||0)}</td><td class="right">${o.bulto!=null?fmt2(o.bulto):''}</td><td>${escapeHtml(o.calidad||'')}</td><td class="right">${o.kg!=null?fmt2(o.kg):''}</td><td>${escapeHtml(o.respa||'')}</td><td>${escapeHtml(o.obs||'')}</td></tr>`).join('')
-    }</tbody></table><div class="total">TOTAL: $ ${fmt2(total)}</div><script>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script></body></html>`;
-    const w=window.open('','_blank'); w.document.open(); w.document.write(html); w.document.close();
-  };
+  if(!can('resumen_print')) return toast('Sin permiso');
+  const data = filtroResumen(); if(!data.length) return toast('Sin datos');
+
+  const cliente = ($('f-cli').value||'').trim(),
+        d1 = $('f-desde').value || '',
+        d2 = $('f-hasta').value || '',
+        total = data.reduce((a,x)=>a+(+x.precio_total||0),0);
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito</title>
+  <style>
+    body{font-family:Arial;margin:28px;color:#111}
+    h1{margin:0 0 6px;font-size:22px}
+    .sub{color:#444;font-size:12px;margin-bottom:12px}
+    .meta{display:flex;justify-content:space-between;margin:12px 0 16px;font-size:14px}
+    .box{border:1px solid #ccc;padding:10px;border-radius:8px}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+    th,td{border:1px solid #ddd;padding:8px}
+    th{background:#f5f5f5;text-align:left}
+    .right{text-align:right}
+    .total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}
+    @media print{@page{size:A4 portrait;margin:20mm}}
+  </style></head><body>
+    <h1>Remito – Tu PyME</h1>
+    <div class="sub">Generado ${new Date().toLocaleString()}</div>
+    <div class="meta">
+      <div class="box">
+        <div><b>Cliente:</b> ${escapeHtml(cliente||'Varios')}</div>
+        <div><b>Rango:</b> ${d1||'—'} a ${d2||'—'}</div>
+      </div>
+      <div class="box"><div><b>N°:</b> REM-${Date.now()}</div></div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr>
+      </thead>
+      <tbody>
+        ${data.map(o=>`
+          <tr>
+            <td>${o.fecha}</td>
+            <td>${escapeHtml(o.prod_nombre||'')}</td>
+            <td class="right">${o.cant}</td>
+            <td>${escapeHtml(o.unidad||'')}</td>
+            <td>${escapeHtml(o.envase||'')}</td>
+            <td class="right">${fmt2(o.precio_total||0)}</td>
+            <td class="right">${o.bulto!=null?fmt2(o.bulto):''}</td>
+            <td>${escapeHtml(o.calidad||'')}</td>
+            <td class="right">${o.kg!=null?fmt2(o.kg):''}</td>
+            <td>${escapeHtml(o.respa||'')}</td>
+            <td>${escapeHtml(o.obs||'')}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="total">TOTAL: $ ${fmt2(total)}</div>
+    <script>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script>
+  </body></html>`;
+
+  const w = window.open('','_blank');
+  w.document.open(); w.document.write(html); w.document.close();
+};
 
   /* ===== Pendientes ===== */
   function getPendientes(){
