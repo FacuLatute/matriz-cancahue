@@ -102,7 +102,7 @@
         <!-- NUEVOS CAMPOS -->
         <div><label>Cantidad Bulto</label><input id="p-bulto" class="num" type="number" min="0" step="0.01" /></div>
         <div><label>Calidad</label><input id="p-calidad" /></div>
-        <div><label>Envase</label><input id="p-envase" /></div>
+        <div><label>Envase</label><input id="p-envase" placeholder="Código de envase (p.ej. CAJA-1KG)" /></div>
         <div><label>Kg</label><input id="p-kg" class="num" type="number" min="0" step="0.01" /></div>
         <div><label>Respa</label><input id="p-respa" /></div>
       </div>
@@ -330,7 +330,6 @@
     const { data:profile } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
     if(!profile){ toast('No tenés perfil. Pedí acceso al admin.'); showLogin(); return; }
     cache.profile = profile; cache.org={ id:profile.org_id }; cache.perms = profile.perms||[];
-    // si es admin y no tiene la nueva perm "envases", la agregamos en memoria para que vea la solapa
     if(profile.role==='admin' && !cache.perms.includes('envases')) cache.perms.push('envases');
 
     $('whoami').textContent = user.email; const rc=$('roleChip'); rc.style.display='none'; rc.textContent=profile.role;
@@ -413,7 +412,7 @@
 
   function renderEnvasesConf(){
     const tbody=document.querySelector('#tbl-envases-conf tbody');
-    if(!tbody) return; /* por si no está abierta config */
+    if(!tbody) return;
     tbody.innerHTML = cache.envases.map(e=>`
       <tr><td>${e.codigo}</td><td>${e.descripcion}</td><td>${e.unidad||''}</td>
       <td class="right"><button class="ghost" onclick="(${delEnvaseConf.toString()})('${e.codigo}')()">Borrar</button></td></tr>
@@ -474,7 +473,7 @@
     `).join('') || `<tr><td colspan="6" class="muted">Sin movimientos</td></tr>`;
   }
 
-  /* ===== Stock de Envases ===== */
+  /* ===== Stock de Envases: helpers ===== */
   $('btn-reset-envases').onclick = async ()=>{
     if(!can('stock_reset')) return toast('Sin permiso');
     const org=cache.org.id;
@@ -501,6 +500,35 @@
     tbody.innerHTML = rows || `<tr><td colspan="6" class="muted">Sin envases</td></tr>`;
   }
 
+  /* === NUEVO: Ajuste de stock de Envases (+ historial opcional) === */
+  async function sbAdjustEnvaseStock(codigo, delta, motivo){
+    const org = cache.org.id;
+    const row = cache.envases.find(e => (e.codigo||'').toLowerCase() === String(codigo||'').toLowerCase());
+    if(!row) return { ok:false, msg:'Envase no encontrado' };
+
+    const nuevo = Number(row.stock||0) + Number(delta||0);
+    const { error: e1 } = await supabase
+      .from('envases')
+      .update({ stock: nuevo })
+      .eq('id', row.id);
+    if(e1) throw e1;
+
+    // Historial opcional (si existe la tabla/permiso)
+    try{
+      await supabase.from('envases_historial').insert({
+        org_id: org,
+        codigo: row.codigo,
+        descripcion: row.descripcion || '',
+        delta: Number(delta||0),
+        unidad: row.unidad || '',
+        motivo: motivo || ''
+      });
+    }catch(_){ /* ignore si no existe la tabla o RLS */ }
+
+    row.stock = nuevo; // refresca cache local
+    return { ok:true, stock:nuevo };
+  }
+
   /* ===== Pedidos ===== */
   $('p-codigo').addEventListener('blur', ()=>{
     const p=prodByCode(($('p-codigo').value||'').trim().toLowerCase());
@@ -510,6 +538,8 @@
       if(p.envase) $('p-envase').value = p.envase;
     }
   });
+
+  // Crear pedido + descuento de envases (si corresponde)
   $('p-crear').onclick = async ()=>{
     if(!can('pedidos')) return toast('Sin permiso');
     const pedido = {
@@ -523,22 +553,60 @@
       estado: $('p-estado').value,
       bulto: parseFloat($('p-bulto').value||0),
       calidad: $('p-calidad').value.trim(),
-      envase: $('p-envase').value.trim(),
+      envase: $('p-envase').value.trim(),   // Código de envase
       kg: parseFloat($('p-kg').value||0),
       respa: $('p-respa').value.trim()
     };
     if(!pedido.codigo || !pedido.cant) return toast('Código y cantidad');
-    const prod=prodByCode(pedido.codigo); if(prod){ if(!pedido.descripcion) pedido.descripcion=prod.descripcion; if(!pedido.unidad) pedido.unidad=prod.unidad; if(!pedido.envase) pedido.envase=prod.envase||''; }
+    const prod=prodByCode(pedido.codigo);
+    if(prod){
+      if(!pedido.descripcion) pedido.descripcion=prod.descripcion;
+      if(!pedido.unidad) pedido.unidad=prod.unidad;
+      if(!pedido.envase) pedido.envase=prod.envase||'';
+    }
     const org=cache.org.id;
-    const { error } = await supabase.from('pedidos').insert({ org_id:org, ...pedido });
-    if(error) return toast(error.message);
+
+    // Insertar y recuperar fila creada
+    const { data: row, error: eIns } = await supabase
+      .from('pedidos')
+      .insert({ org_id:org, ...pedido })
+      .select()
+      .single();
+    if(eIns) return toast(eIns.message);
+
+    // Si hay envase válido y bulto > 0, descontar stock de envases
+    let aplicado = 0;
+    const tieneCodigoEnvase = cache.envases.some(e => (e.codigo||'').toLowerCase() === (pedido.envase||'').toLowerCase());
+    if (tieneCodigoEnvase && Number(pedido.bulto||0) > 0){
+      try{
+        await sbAdjustEnvaseStock(pedido.envase, -Number(pedido.bulto), `Consumo envase por pedido ${row.id}`);
+        aplicado = Number(pedido.bulto);
+      }catch(err){
+        console.error(err);
+        toast('No se pudo descontar stock de envases');
+      }
+    }
+
+    // Guardar cuánto bulto de envase se aplicó (si existe la columna)
+    if (aplicado > 0){
+      try{
+        await supabase.from('pedidos')
+          .update({ bulto_aplicado_envase: aplicado })
+          .eq('id', row.id);
+      }catch(_){ /* ignora si la columna no existe */ }
+    }
+
+    // Si está Entregado, aplicar recepción al stock del producto
     if(pedido.estado==='Entregado'){
       const rec = (pedido.recibido!=null)?pedido.recibido:pedido.cant;
-      await sbUpsertStock({ codigo:pedido.codigo, descripcion:pedido.descripcion, unidad:pedido.unidad, delta:rec, motivo:'Recepción pedido' });
-      await supabase.from('pedidos').update({ recibido_aplicado: rec }).eq('org_id',org).eq('codigo',pedido.codigo).eq('fecha',pedido.fecha);
+      await sbUpsertStock({ codigo:pedido.codigo, descripcion:pedido.descripcion, unidad:pedido.unidad, delta:rec, motivo:`Recepción pedido ${row.id}` });
+      await supabase.from('pedidos').update({ recibido_aplicado: rec }).eq('id',row.id);
     }
-    await loadAll(); renderPedidos(); renderStock(); renderHistorial(); renderPendientes(); toast('Pedido creado');
+
+    await loadAll(); renderPedidos(); renderStock(); renderHistorial(); renderPendientes(); renderEnvasesStock();
+    toast('Pedido creado');
   };
+
   $('p-limpiar').onclick = ()=>{ ['p-fecha','p-codigo','p-descripcion','p-proveedor','p-cant','p-precio','p-bulto','p-calidad','p-envase','p-kg','p-respa'].forEach(i=>$(i).value=''); $('p-estado').value='Pendiente'; };
 
   function setPedidoRecibido(id){ return async (val)=>{
@@ -559,12 +627,31 @@
     await supabase.from('pedidos').update({ estado:'Entregado', recibido_aplicado: recTarget }).eq('id',id);
     await loadAll(); renderPedidos(); renderStock(); renderPendientes(); renderHistorial(); toast('Entregado');
   }
+
+  // BORRAR pedido: revierte stock de producto y de envases si aplicó
   function delPedido(id){ return async ()=>{
     const p = cache.pedidos.find(x=>x.id===id); if(!p) return;
-    if(p.recibido_aplicado){ await sbUpsertStock({ codigo:p.codigo, descripcion:p.descripcion||'', unidad:p.unidad||'', delta:-p.recibido_aplicado, motivo:`Reverso recepción ${id}` }); }
+
+    // Reversa de stock de producto
+    if (p.recibido_aplicado){
+      await sbUpsertStock({ codigo:p.codigo, descripcion:p.descripcion||'', unidad:p.unidad||'', delta:-p.recibido_aplicado, motivo:`Reverso recepción ${id}` });
+    }
+
+    // Reversa de envases (si se descontaron bultos)
+    const tieneCodigoEnvase = cache.envases.some(e => (e.codigo||'').toLowerCase() === String(p.envase||'').toLowerCase());
+    const bultoAplic = Number(p.bulto_aplicado_envase||0);
+    if (tieneCodigoEnvase && bultoAplic > 0){
+      try{
+        await sbAdjustEnvaseStock(p.envase, +bultoAplic, `Reverso consumo envase pedido ${id}`);
+      }catch(err){ console.error(err); }
+    }
+
     await supabase.from('pedidos').delete().eq('id',id);
-    await loadAll(); renderPedidos(); renderStock(); renderHistorial(); renderPendientes(); toast('Pedido borrado');
+
+    await loadAll(); renderPedidos(); renderStock(); renderHistorial(); renderPendientes(); renderEnvasesStock();
+    toast('Pedido borrado');
   }; }
+
   function renderPedidos(){
     const tbody=document.querySelector('#tbl-pedidos tbody');
     tbody.innerHTML = cache.pedidos.map(p=>`
@@ -669,65 +756,97 @@
 
   /* ===== Resumen / Remito ===== */
   $('btn-print').onclick = ()=>{
-  if(!can('resumen_print')) return toast('Sin permiso');
-  const data = filtroResumen(); if(!data.length) return toast('Sin datos');
+    if(!can('resumen_print')) return toast('Sin permiso');
+    const data = filtroResumen(); if(!data.length) return toast('Sin datos');
 
-  const cliente = ($('f-cli').value||'').trim(),
-        d1 = $('f-desde').value || '',
-        d2 = $('f-hasta').value || '',
-        total = data.reduce((a,x)=>a+(+x.precio_total||0),0);
+    const cliente = ($('f-cli').value||'').trim(),
+          d1 = $('f-desde').value || '',
+          d2 = $('f-hasta').value || '',
+          total = data.reduce((a,x)=>a+(+x.precio_total||0),0);
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito</title>
-  <style>
-    body{font-family:Arial;margin:28px;color:#111}
-    h1{margin:0 0 6px;font-size:22px}
-    .sub{color:#444;font-size:12px;margin-bottom:12px}
-    .meta{display:flex;justify-content:space-between;margin:12px 0 16px;font-size:14px}
-    .box{border:1px solid #ccc;padding:10px;border-radius:8px}
-    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
-    th,td{border:1px solid #ddd;padding:8px}
-    th{background:#f5f5f5;text-align:left}
-    .right{text-align:right}
-    .total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}
-    @media print{@page{size:A4 portrait;margin:20mm}}
-  </style></head><body>
-    <h1>Remito – Tu PyME</h1>
-    <div class="sub">Generado ${new Date().toLocaleString()}</div>
-    <div class="meta">
-      <div class="box">
-        <div><b>Cliente:</b> ${escapeHtml(cliente||'Varios')}</div>
-        <div><b>Rango:</b> ${d1||'—'} a ${d2||'—'}</div>
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito</title>
+    <style>
+      body{font-family:Arial;margin:28px;color:#111}
+      h1{margin:0 0 6px;font-size:22px}
+      .sub{color:#444;font-size:12px;margin-bottom:12px}
+      .meta{display:flex;justify-content:space-between;margin:12px 0 16px;font-size:14px}
+      .box{border:1px solid #ccc;padding:10px;border-radius:8px}
+      table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+      th,td{border:1px solid #ddd;padding:8px}
+      th{background:#f5f5f5;text-align:left}
+      .right{text-align:right}
+      .total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}
+      @media print{@page{size:A4 portrait;margin:20mm}}
+    </style></head><body>
+      <h1>Remito – Tu PyME</h1>
+      <div class="sub">Generado ${new Date().toLocaleString()}</div>
+      <div class="meta">
+        <div class="box">
+          <div><b>Cliente:</b> ${escapeHtml(cliente||'Varios')}</div>
+          <div><b>Rango:</b> ${d1||'—'} a ${d2||'—'}</div>
+        </div>
+        <div class="box"><div><b>N°:</b> REM-${Date.now()}</div></div>
       </div>
-      <div class="box"><div><b>N°:</b> REM-${Date.now()}</div></div>
-    </div>
-    <table>
-      <thead>
-        <tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr>
-      </thead>
-      <tbody>
-        ${data.map(o=>`
-          <tr>
-            <td>${o.fecha}</td>
-            <td>${escapeHtml(o.prod_nombre||'')}</td>
-            <td class="right">${o.cant}</td>
-            <td>${escapeHtml(o.unidad||'')}</td>
-            <td>${escapeHtml(o.envase||'')}</td>
-            <td class="right">${fmt2(o.precio_total||0)}</td>
-            <td class="right">${o.bulto!=null?fmt2(o.bulto):''}</td>
-            <td>${escapeHtml(o.calidad||'')}</td>
-            <td class="right">${o.kg!=null?fmt2(o.kg):''}</td>
-            <td>${escapeHtml(o.respa||'')}</td>
-            <td>${escapeHtml(o.obs||'')}</td>
-          </tr>`).join('')}
-      </tbody>
-    </table>
-    <div class="total">TOTAL: $ ${fmt2(total)}</div>
-    <script>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script>
-  </body></html>`;
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr>
+        </thead>
+        <tbody>
+          ${data.map(o=>`
+            <tr>
+              <td>${o.fecha}</td>
+              <td>${escapeHtml(o.prod_nombre||'')}</td>
+              <td class="right">${o.cant}</td>
+              <td>${escapeHtml(o.unidad||'')}</td>
+              <td>${escapeHtml(o.envase||'')}</td>
+              <td class="right">${fmt2(o.precio_total||0)}</td>
+              <td class="right">${o.bulto!=null?fmt2(o.bulto):''}</td>
+              <td>${escapeHtml(o.calidad||'')}</td>
+              <td class="right">${o.kg!=null?fmt2(o.kg):''}</td>
+              <td>${escapeHtml(o.respa||'')}</td>
+              <td>${escapeHtml(o.obs||'')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="total">TOTAL: $ ${fmt2(total)}</div>
+      <script>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script>
+    </body></html>`;
 
-  const w = window.open('','_blank');
-  w.document.open(); w.document.write(html); w.document.close();
-};
+    const w = window.open('','_blank');
+    w.document.open(); w.document.write(html); w.document.close();
+  };
+
+  function filtroResumen(){
+    const cli = ($('f-cli').value||'').toLowerCase();
+    const d1 = $('f-desde').value || null;
+    const d2 = $('f-hasta').value || null;
+    const list = cache.resumen.filter(r=> (cli?(r.cliente||'').toLowerCase().includes(cli):true) && (d1? r.fecha>=d1 : true) && (d2? r.fecha<=d2 : true));
+    $('res-total').textContent = fmt2(list.reduce((a,r)=>a+(+r.precio_total||0),0));
+    return list;
+  }
+  $('f-cli').addEventListener('input',()=>{ renderResumen(); });
+  ['f-desde','f-hasta'].forEach(id=>$(id).addEventListener('input',()=>{ renderResumen(); }));
+
+  function renderResumen(){
+    const data = filtroResumen();
+    const tbody=document.querySelector('#tbl-resumen tbody');
+    tbody.innerHTML = data.map(o=>`
+      <tr>
+        <td>${o.fecha}</td>
+        <td>${escapeHtml(o.cliente||'')}</td>
+        <td>${escapeHtml(o.prod_nombre||'')}</td>
+        <td class="right">${o.cant}</td>
+        <td>${escapeHtml(o.unidad||'')}</td>
+        <td>${escapeHtml(o.envase||'')}</td>
+        <td class="right">${fmt2(o.precio_total||0)}</td>
+        <td class="right">${o.bulto!=null?fmt2(o.bulto):''}</td>
+        <td>${escapeHtml(o.calidad||'')}</td>
+        <td class="right">${o.kg!=null?fmt2(o.kg):''}</td>
+        <td>${escapeHtml(o.respa||'')}</td>
+        <td>${escapeHtml(o.obs||'')}</td>
+      </tr>
+    `).join('') || `<tr><td colspan="12" class="muted">Sin órdenes finalizadas</td></tr>`;
+  }
 
   /* ===== Pendientes ===== */
   function getPendientes(){
