@@ -44,7 +44,7 @@
     #loginView{max-width:420px;margin:12vh auto;padding:16px}
     .link{color:#a78bfa;cursor:pointer;text-decoration:underline}
   
-    /* === ALTUM old login layout + brand === */
+    /* ALTUM login layout + brand */
     #loginView{max-width:960px;margin:8vh auto;padding:0}
     .login-box{display:grid;grid-template-columns:1fr 1fr;border:1px solid #22304b;border-radius:16px;overflow:hidden;background:#0b1222}
     .login-left{padding:24px}
@@ -737,6 +737,19 @@
     await loadAll(); renderProduccion(); renderStock(); renderHistorial(); renderResumen(); toast('Orden creada');
   };
   async function upsertResumenFromOP(o){
+  // === Edición en Resumen ===
+  function setResumenField(id, field){ return async (val)=>{
+    const payload = {};
+    if(field==='precio_total'){ payload[field] = (val===''? null : Number(val)||0); } else { payload[field] = val; }
+    const { error } = await supabase.from('resumen').update(payload).eq('id', id);
+    if(error){ toast(error.message); return; }
+    await loadAll(); renderResumen();
+  }; }
+  function commitResumenField(id, field, el){
+    const val = el.value;
+    setResumenField(id, field)(val);
+  }
+
     const org=cache.org.id;
     const prodNombre = o.prod_nombre || (o.codigo_prod ? (cache.products.find(p=>p.codigo===o.codigo_prod)?.descripcion || '') : '');
     const payload = {
@@ -811,7 +824,7 @@
       .total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}
       @media print{@page{size:A4 portrait;margin:20mm}}
     
-    /* === ALTUM old login layout + brand === */
+    /* ALTUM login layout + brand */
     #loginView{max-width:960px;margin:8vh auto;padding:0}
     .login-box{display:grid;grid-template-columns:1fr 1fr;border:1px solid #22304b;border-radius:16px;overflow:hidden;background:#0b1222}
     .login-left{padding:24px}
@@ -874,49 +887,37 @@
   ['f-desde','f-hasta'].forEach(id=>$(id).addEventListener('input',()=>{ renderResumen(); }));
 
   
-  function setResumenField(id, field){ return async (val)=>{
-    const payload = {}; 
-    if(field==='precio_total'){ payload[field] = (val===''? null : Number(val)||0); }
-    else { payload[field] = val; }
-    const { error } = await supabase.from('resumen').update(payload).eq('id', id);
-    if(error){ toast(error.message); return; }
-    await loadAll(); renderResumen();
-  }; }
-  function delResumen(id){ return async ()=>{
-    if(!can('resumen_borrar')) return toast('Sin permiso');
-    await supabase.from('resumen').delete().eq('id', id);
-    await loadAll(); renderResumen();
-    toast('Línea borrada');
-  }; }
-
-  function renderResumen(){
-    const data = filtroResumen();
-    const tbody=document.querySelector('#tbl-resumen tbody');
-    tbody.innerHTML = data.map(o=>`
-      <tr>
-        <td>${o.fecha}</td>
-        <td>${escapeHtml(o.cliente||'')}</td>
-        <td>${escapeHtml(o.prod_nombre||'')}</td>
-        <td class="right">${o.cant}</td>
-        <td>${escapeHtml(o.unidad||'')}</td>
-        <td>${escapeHtml(o.envase||'')}</td>
-        <td class="right">
-          <input type="number" min="0" step="0.01" value="${o.precio_total??''}" placeholder="0.00" style="width:120px"
-                 oninput="setResumenField('${'${'}o.id{'}'}','precio_total')(this.value)">
-        </td>
-        <td class="right">${o.bulto!=null?fmt2(o.bulto):''}</td>
-        <td>${escapeHtml(o.calidad||'')}</td>
-        <td class="right">${o.kg!=null?fmt2(o.kg):''}</td>
-        <td>${escapeHtml(o.respa||'')}</td>
-        <td>
-          <input value="${escapeHtml(o.obs||'')}" placeholder="Observaciones"
-                 oninput="setResumenField('${'${'}o.id{'}'}','obs')(this.value)">
-        </td>
-      </tr>
-    `).join('') || `<tr><td colspan="12" class="muted">Sin órdenes finalizadas</td></tr>`;
-  }
-
-  /* ===== Pendientes ===== */
+function renderResumen(){
+  const data = filtroResumen();
+  const tbody = document.querySelector('#tbl-resumen tbody');
+  tbody.innerHTML = data.map(o=>`
+    <tr>
+      <td>${o.fecha}</td>
+      <td>${escapeHtml(o.cliente||'')}</td>
+      <td>${escapeHtml(o.prod_nombre||'')}</td>
+      <td class="right">${o.cant}</td>
+      <td>${escapeHtml(o.unidad||'')}</td>
+      <td>${escapeHtml(o.envase||'')}</td>
+      <td class="right">
+        <input type="number" min="0" step="0.01" value="${o.precio_total??''}" placeholder="0.00" style="width:120px"
+               oninput="setResumenField('${o.id}','precio_total')(this.value)"
+               onchange="commitResumenField('${o.id}','precio_total', this)"
+               onkeydown="if(event.key==='Enter'){event.preventDefault(); commitResumenField('${o.id}','precio_total', this); this.blur(); }">
+      </td>
+      <td class="right">${o.bulto!=null?fmt2(o.bulto):''}</td>
+      <td>${escapeHtml(o.calidad||'')}</td>
+      <td class="right">${o.kg!=null?fmt2(o.kg):''}</td>
+      <td>${escapeHtml(o.respa||'')}</td>
+      <td>
+        <input value="${escapeHtml(o.obs||'')}" placeholder="Observaciones"
+               oninput="setResumenField('${o.id}','obs')(this.value)"
+               onchange="commitResumenField('${o.id}','obs', this)"
+               onkeydown="if(event.key==='Enter'){event.preventDefault(); commitResumenField('${o.id}','obs', this); this.blur(); }">
+      </td>
+    </tr>
+  `).join('') || `<tr><td colspan="12" class="muted">Sin órdenes finalizadas</td></tr>`;
+}
+/* ===== Pendientes ===== */
   function getPendientes(){
     const prov=($('pp-prov').value||'').toLowerCase(), d1=$('pp-desde').value||null, d2=$('pp-hasta').value||null;
     return cache.pedidos
@@ -950,7 +951,7 @@
   $('pp-print').onclick = ()=>{
     const data=getPendientes(); if(!data.length) return toast('Sin datos');
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Pendientes</title><style>body{font-family:Arial;margin:28px;color:#111}h1{margin:0 0 6px;font-size:22px}.sub{color:#444;font-size:12px;margin-bottom:12px}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5;text-align:left}.right{text-align:right}@media print{@page{size:A4;margin:18mm}}
-    /* === ALTUM old login layout + brand === */
+    /* ALTUM login layout + brand */
     #loginView{max-width:960px;margin:8vh auto;padding:0}
     .login-box{display:grid;grid-template-columns:1fr 1fr;border:1px solid #22304b;border-radius:16px;overflow:hidden;background:#0b1222}
     .login-left{padding:24px}
@@ -1018,3 +1019,4 @@
   </script>
 </body>
 </html>
+
