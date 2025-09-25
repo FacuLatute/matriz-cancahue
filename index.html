@@ -262,7 +262,6 @@
   function showApp(){ $('loginView').style.display='none'; $('appHeader').style.display='flex'; $('app').style.display='block'; }
 
   async function afterAuth(user){
-    // Perfil / organización opcional
     const { data:profile } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
     cache.profile = profile || { name:user.email, org_id:null };
     cache.org = { id: profile?.org_id || null };
@@ -359,7 +358,6 @@
     const org=cache.org.id;
     let row = cache.envases.find(e => (e.codigo||'').toLowerCase() === String(codigo||'').toLowerCase());
     if(!row){
-      // si no existe, crear
       const { data, error } = await supabase.from('envases').insert({ org_id:org, codigo, descripcion:'', unidad:'', stock:0, repo:0 }).select().single();
       if(error) throw error;
       row = data; cache.envases.push(row);
@@ -379,7 +377,6 @@
         motivo: motivo || ''
       });
     }catch(_){/* tolerante si no existe tabla o RLS */}
-    // refresco del historial
     try{
       const { data } = await supabase.from('envases_historial').select('*').eq('org_id',org).order('fecha',{ascending:false});
       cache.envHist = data||cache.envHist;
@@ -408,7 +405,6 @@
   $('btn-reset-envases').onclick = async ()=>{
     const org=cache.org.id;
     try{
-      // dump a 0 (y registrar movimientos negativos por el saldo actual)
       for(const e of cache.envases){
         if(Number(e.stock||0)!==0){
           await sbAdjustEnvaseStock(e.codigo, -Number(e.stock||0), 'Reset a 0');
@@ -480,7 +476,6 @@
     };
     if(!p.codigo || !p.cant) return toast('Código y cantidad');
 
-    // autocompletar
     const prod=prodByCode(p.codigo);
     if(prod){ if(!p.descripcion) p.descripcion=prod.descripcion; if(!p.unidad) p.unidad=prod.unidad; if(!p.envase && prod.envase) p.envase=prod.envase; }
 
@@ -488,7 +483,7 @@
     const { data: row, error: eIns } = await supabase.from('pedidos').insert({ org_id:org, ...p }).select().single();
     if(eIns) return toast(eIns.message);
 
-    // *** NUEVO: Entrada de envases al crear Pedido ***
+    // *** Entrada de envases al crear Pedido ***
     let aplicado = 0;
     const envValido = p.envase && cache.envases.some(e => (e.codigo||'').toLowerCase() === p.envase.toLowerCase());
     if (envValido && Number(p.bulto||0) > 0){
@@ -501,7 +496,6 @@
       try{ await supabase.from('pedidos').update({ bulto_aplicado_envase: aplicado }).eq('id',row.id); }catch(_){}
     }
 
-    // recepción de insumo al marcar Entregado (igual que antes)
     if(p.estado==='Entregado'){
       const rec = (p.recibido!=null)?p.recibido:p.cant;
       await sbUpsertStock({ codigo:p.codigo, descripcion:p.descripcion, unidad:p.unidad, delta:rec, motivo:`Recepción pedido ${row.id}` });
@@ -537,12 +531,11 @@
   function delPedido(id){ return async ()=>{
     const p = cache.pedidos.find(x=>x.id===id); if(!p) return;
 
-    // Reversa recepción de insumo si aplicó
     if (p.recibido_aplicado){
       await sbUpsertStock({ codigo:p.codigo, descripcion:p.descripcion||'', unidad:p.unidad||'', delta:-p.recibido_aplicado, motivo:`Reverso recepción ${id}` });
     }
 
-    // *** Reversa de envases: si sumamos al crear, ahora restamos ***
+    // *** Reversa de envases: restar lo que se había sumado ***
     const bAplic = Number(p.bulto_aplicado_envase||0);
     if (p.envase && bAplic>0){
       try{ await sbAdjustEnvaseStock(p.envase, -bAplic, `Reversa entrada envase Pedido ${id}`); }catch(err){ console.error(err); }
@@ -599,17 +592,15 @@
 
     const pm = prodByAny(o.prod_nombre); if(pm){ o.codigo_prod=pm.codigo; o.prod_nombre=pm.descripcion; o.unidad=o.unidad||pm.unidad; o.envase=o.envase||pm.envase; }
 
-    // Verifica stock de insumo
     const row=cache.stock[o.ins]; if(!row || (Number(row.qty)||0) < Number(o.ins_cant||0)) return toast('Stock de insumo insuficiente');
 
-    // Consume insumo
     await sbConsumeStock(o.ins, o.ins_cant, 'Consumo producción');
 
     const org=cache.org.id;
     const { data:insOP, error } = await supabase.from('produccion').insert({ org_id:org, ...o, consumo_aplicado:o.ins_cant }).select().single();
     if(error) return toast(error.message);
 
-    // *** NUEVO: Salida de envases al crear Producción ***
+    // *** Salida de envases al crear Producción ***
     let envAplic = 0;
     const envValido = o.envase && cache.envases.some(e => (e.codigo||'').toLowerCase() === o.envase.toLowerCase());
     if (envValido && Number(o.bulto||0) > 0){
@@ -649,11 +640,9 @@
   function delOP(id){ return async ()=>{
     const o=cache.prod.find(x=>x.id===id); if(!o) return;
 
-    // Reversa de consumo de insumo
     if(o.consumo_aplicado){
       await sbUpsertStock({ codigo:o.ins, descripcion:cache.stock[o.ins]?.descripcion||'', unidad:cache.stock[o.ins]?.unidad||'', delta:o.consumo_aplicado, motivo:`Reverso consumo ${id}` });
     }
-    // Reversa de envases
     const bEnv = Number(o.bulto_envase_aplicado||0);
     if (o.envase && bEnv>0){
       try{ await sbAdjustEnvaseStock(o.envase, +bEnv, `Reversa salida envase OP ${id}`);}catch(err){ console.error(err); }
@@ -802,3 +791,4 @@
   </script>
 </body>
 </html>
+
