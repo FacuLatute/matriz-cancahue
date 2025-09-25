@@ -873,6 +873,22 @@
   $('f-cli').addEventListener('input',()=>{ renderResumen(); });
   ['f-desde','f-hasta'].forEach(id=>$(id).addEventListener('input',()=>{ renderResumen(); }));
 
+  
+  function setResumenField(id, field){ return async (val)=>{
+    const payload = {}; 
+    if(field==='precio_total'){ payload[field] = (val===''? null : Number(val)||0); }
+    else { payload[field] = val; }
+    const { error } = await supabase.from('resumen').update(payload).eq('id', id);
+    if(error){ toast(error.message); return; }
+    await loadAll(); renderResumen();
+  }; }
+  function delResumen(id){ return async ()=>{
+    if(!can('resumen_borrar')) return toast('Sin permiso');
+    await supabase.from('resumen').delete().eq('id', id);
+    await loadAll(); renderResumen();
+    toast('Línea borrada');
+  }; }
+
   function renderResumen(){
     const data = filtroResumen();
     const tbody=document.querySelector('#tbl-resumen tbody');
@@ -884,12 +900,18 @@
         <td class="right">${o.cant}</td>
         <td>${escapeHtml(o.unidad||'')}</td>
         <td>${escapeHtml(o.envase||'')}</td>
-        <td class="right">${fmt2(o.precio_total||0)}</td>
+        <td class="right">
+          <input type="number" min="0" step="0.01" value="${o.precio_total??''}" placeholder="0.00" style="width:120px"
+                 oninput="setResumenField('${'${'}o.id{'}'}','precio_total')(this.value)">
+        </td>
         <td class="right">${o.bulto!=null?fmt2(o.bulto):''}</td>
         <td>${escapeHtml(o.calidad||'')}</td>
         <td class="right">${o.kg!=null?fmt2(o.kg):''}</td>
         <td>${escapeHtml(o.respa||'')}</td>
-        <td>${escapeHtml(o.obs||'')}</td>
+        <td>
+          <input value="${escapeHtml(o.obs||'')}" placeholder="Observaciones"
+                 oninput="setResumenField('${'${'}o.id{'}'}','obs')(this.value)">
+        </td>
       </tr>
     `).join('') || `<tr><td colspan="12" class="muted">Sin órdenes finalizadas</td></tr>`;
   }
@@ -996,4 +1018,3 @@
   </script>
 </body>
 </html>
-
