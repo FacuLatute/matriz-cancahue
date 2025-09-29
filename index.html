@@ -544,36 +544,67 @@ function debounceSave(fn, key, ms=300){
 
 
   /* === NUEVO: Ajuste de stock de Envases (+ historial opcional) === */
-  async function sbAdjustEnvaseStock(codigo, delta, motivo){
-    const org = cache.org.id;
-    const row = cache.envases.find(e => (e.codigo||'').toLowerCase() === String(codigo||'').toLowerCase());
-    if(!row) return { ok:false, msg:'Envase no encontrado' };
+  
+  
+  
+  // === Ajuste de stock de Envases (función única, limpia) ===
+async function sbAdjustEnvaseStock(codigo, delta, motivo){
+  const org = cache.org?.id;
+  const norm = (v)=>String(v||'').trim().toLowerCase();
+  const code = norm(codigo);
 
-    const nuevo = Number(row.stock||0) + Number(delta||0);
-    const { error: e1 } = await supabase
-      .from('envases')
-      .update({ stock: nuevo })
-      .eq('id', row.id);
-    if(e1) throw e1;
+  // 1) Buscar en cache
+  let row = (cache.envases || []).find(e => norm(e.codigo) === code);
 
-    // Historial opcional (si existe la tabla/permiso)
+  // 2) Si no está, buscar en DB
+  if(!row){
     try{
-      await supabase.from('envases_historial').insert({
-        org_id: org,
-        codigo: row.codigo,
-        descripcion: row.descripcion || '',
-        delta: Number(delta||0),
-        unidad: row.unidad || '',
-        motivo: motivo || ''
-      });
-    }catch(_){ /* ignore si no existe la tabla o RLS */ }
-
-    row.stock = nuevo; // refresca cache local
-    return { ok:true, stock:nuevo };
+      const { data } = await supabase
+        .from('envases')
+        .select('*')
+        .eq('org_id', org)
+        .ilike('codigo', codigo)
+        .maybeSingle();
+      if(data) row = data;
+    }catch(_){}
   }
 
+  if(!row){
+    return { ok:false, msg:'Envase no encontrado (' + codigo + ')' };
+  }
 
-  // Ajuste manual de envases (desde la tabla)
+  // 3) Actualizar stock
+  const nuevo = Number(row.stock||0) + Number(delta||0);
+  const { error:e1 } = await supabase
+    .from('envases')
+    .update({ stock: nuevo })
+    .eq('id', row.id);
+  if(e1) throw e1;
+
+  // 4) Historial opcional
+  try{
+    await supabase.from('envases_historial').insert({
+      org_id: org,
+      codigo: row.codigo,
+      descripcion: row.descripcion || '',
+      delta: Number(delta||0),
+      unidad: row.unidad || '',
+      motivo: motivo || ''
+    });
+  }catch(_){}
+
+  // 5) Refrescar cache (si estaba) o empujar
+  const local = (cache.envases || []).find(e => norm(e.codigo) === code);
+  if(local){
+    local.stock = nuevo;
+  } else if (Array.isArray(cache.envases)) {
+    cache.envases.push({ ...row, stock: nuevo });
+  }
+
+  return { ok:true, stock: nuevo };
+}
+
+// Ajuste manual de envases (desde la tabla)
   function ajusteEnvaseManual(codigo, signo){
     return async ()=>{
       const txt = prompt(`Cantidad a ${signo>0?'AGREGAR':'QUITAR'} para ${codigo}:`, '0');
@@ -754,12 +785,15 @@ function debounceSave(fn, key, ms=300){
     await sbConsumeStock(o.ins, o.ins_cant, 'Consumo producción');
     const org=cache.org.id;
     const { data:insOP, error } = await supabase.from('produccion').insert({ org_id:org, ...o, consumo_aplicado:o.ins_cant }).select().single();
+    
     // === Consumo de ENVASES por OP (usa "bulto" como cantidad de envases) ===
     try{
-      const existeEnvase = cache.envases.some(e => (e.codigo||'').toLowerCase() === String(o.envase||'').toLowerCase());
+      const norm = (v)=>String(v||'').trim().toLowerCase();
+      const existeEnvase = (cache.envases||[]).some(e => norm(e.codigo) === norm(o.envase));
       const bultos = Number(o.bulto||0);
-      if (existeEnvase && bultos > 0 && insOP?.id){
-        await sbAdjustEnvaseStock(o.envase, -bultos, `Consumo envase OP ${insOP.id}`);
+      if (bultos > 0 && (existeEnvase || norm(o.envase)) && insOP?.id){
+        const r = await sbAdjustEnvaseStock(o.envase, -bultos, `Consumo envase OP ${insOP.id}`);
+        if(!r?.ok){ toast(r?.msg || 'No se encontró el envase'); }
         try{
           await supabase.from('produccion').update({ env_bulto_aplicado: bultos }).eq('id', insOP.id);
         }catch(_){}
@@ -768,7 +802,7 @@ function debounceSave(fn, key, ms=300){
 
     if(error) return toast(error.message);
     if(o.estado==='Terminado') await upsertResumenFromOP(insOP);
-    await loadAll(); renderProduccion(); renderStock(); renderHistorial(); renderResumen(); toast('Orden creada');
+    await loadAll(); renderProduccion(); renderStock(); renderHistorial(); renderResumen(); renderEnvasesStock(); toast('Orden creada');
   };
   async function upsertResumenFromOP(o){
     const org=cache.org.id;
