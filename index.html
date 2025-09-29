@@ -103,8 +103,9 @@
         <div><label>Cantidad Bulto</label><input id="p-bulto" class="num" type="number" min="0" step="0.01" /></div>
         <div><label>Calidad</label><input id="p-calidad" /></div>
         <div><label>Envase</label><input id="p-envase" placeholder="Código de envase (p.ej. CAJA-1KG)" /></div>
-        <div><label>Kg</label><input id="p-kg" class="num" type="number" min="0" step="0.01" /></div>
+        <div><label>Descripción envase</label><input id="p-envase-desc" placeholder="(se completa solo)" readonly /></div>
         <div><label>Respa</label><input id="p-respa" /></div>
+        <div><label>Kg</label><input id="p-kg" class="num" type="number" min="0" step="0.01" /></div>
       </div>
       <div class="right" style="margin-top:10px">
         <button class="ghost" id="p-limpiar">Limpiar</button>
@@ -272,13 +273,6 @@
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp4YnpqZG9iZ3JsYWJiZnF3c2FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1MTg3OTcsImV4cCI6MjA3MzA5NDc5N30.DmgzIiRSsZ_yEl9MfLd2R6n3zbaghq2JB4FLcKb4KNs";
   const { createClient } = window.supabase;
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// -- Botón Cerrar sesión siempre funcional
-document.addEventListener("DOMContentLoaded", ()=>{
-  const b = document.getElementById("btn-logout");
-  if(b) b.onclick = async ()=>{ try{ await supabase.auth.signOut(); }catch(_){ } showLogin(); toast("Sesión cerrada"); };
-});
-
 
 // === Debounce para evitar carreras de updates ===
 const _debounces = {};
@@ -595,7 +589,7 @@ function debounceSave(fn, key, ms=300){
     const tieneCodigoEnvase = cache.envases.some(e => (e.codigo||'').toLowerCase() === (pedido.envase||'').toLowerCase());
     if (tieneCodigoEnvase && Number(pedido.bulto||0) > 0){
       try{
-        await sbAdjustEnvaseStock(pedido.envase, -Number(pedido.bulto), `Consumo envase por pedido ${row.id}`);
+        await sbAdjustEnvaseStock(pedido.envase, +Number(pedido.bulto), `Entrada por pedido ${row.id}`);
         aplicado = Number(pedido.bulto);
       }catch(err){
         console.error(err);
@@ -658,7 +652,7 @@ function debounceSave(fn, key, ms=300){
     const bultoAplic = Number(p.bulto_aplicado_envase||0);
     if (tieneCodigoEnvase && bultoAplic > 0){
       try{
-        await sbAdjustEnvaseStock(p.envase, +bultoAplic, `Reverso consumo envase pedido ${id}`);
+        await sbAdjustEnvaseStock(p.envase, -bultoAplic, `Reversa entrada envase pedido ${id}`);
       }catch(err){ console.error(err); }
     }
 
@@ -859,18 +853,12 @@ function debounceSave(fn, key, ms=300){
   };
 }
 
-
-function commitResumenField(id, field, el){
-  const val = el.value;
-  setResumenField(id, field)(val);
-}
-
 function renderResumen(){
   const data = filtroResumen();
   const tbody = document.querySelector('#tbl-resumen tbody');
   const editable = (typeof can==='function') && can('resumen_editar');
 
-  tbody.innerHTML = data.map(o=>{
+  const rows = data.map(o=>{
     const precioCell = editable
       ? `<input type="number" min="0" step="0.01" value="${o.precio_total??''}" placeholder="0.00" style="width:120px"
            oninput="setResumenField('${o.id}','precio_total')(this.value)"
@@ -900,9 +888,10 @@ function renderResumen(){
         <td>${escapeHtml(o.respa||'')}</td>
         <td>${obsCell}</td>
       </tr>`;
-  }).join('') || `<tr><td colspan="12" class="muted">Sin órdenes finalizadas</td></tr>`;
-}
+  }).join('');
 
+  tbody.innerHTML = rows || `<tr><td colspan="12" class="muted">Sin órdenes finalizadas</td></tr>`;
+}
 
   /* ===== Pendientes ===== */
   function getPendientes(){
@@ -971,8 +960,27 @@ function renderResumen(){
   };
 
   /* ===== Tabs ===== */
-  function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forEach(s=>s.style.display='none'); document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active')); const btn=document.querySelector(`.tab[data-tab="${tab}"]`); const sec=$('tab-'+tab); if(btn&&sec&&btn.style.display!=='none'){ btn.classList.add('active'); sec.style.display='block'; } }
-  $('tabsBar').addEventListener('click',(e)=>{ if(e.target.classList.contains('tab')) activateTab(e.target.dataset.tab); });
+  
+// --- Mostrar descripción de envase al lado del código ---
+function getEnvaseByCodigo(cod){
+  if(!cod) return null;
+  cod = String(cod).trim().toLowerCase();
+  const arr = (cache && cache.envases) ? cache.envases : [];
+  return arr.find(e => String(e.codigo).trim().toLowerCase() === cod) || null;
+}
+function wireEnvaseDescripcion(){
+  const inCod  = document.getElementById('p-envase');
+  const inDesc = document.getElementById('p-envase-desc');
+  if(!inCod || !inDesc) return;
+  const update = () => {
+    const e = getEnvaseByCodigo(inCod.value);
+    inDesc.value = e ? (e.descripcion || e.nombre || '') : '';
+  };
+  ['input','change','blur'].forEach(ev => inCod.addEventListener(ev, update));
+  update();
+}
+function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forEach(s=>s.style.display='none'); document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active')); const btn=document.querySelector(`.tab[data-tab="${tab}"]`); const sec=$('tab-'+tab); if(btn&&sec&&btn.style.display!=='none'){ btn.classList.add('active'); sec.style.display='block'; } }
+  $('tabsBar').addEventListener('click',(e)=>{ if(e.target.classList.contains('tab')) activateTab(e.target.dataset.tab); if(e.target.dataset.tab==='pedidos'){ try{ wireEnvaseDescripcion(); }catch(_){} } });
 
   /* ===== INIT ===== */
   (async ()=>{ const { data:{ session } } = await supabase.auth.getSession(); if(session?.user){ await ensureBootstrap(session.user); await afterAuth(session.user); } else { showLogin(); } })();
@@ -981,7 +989,6 @@ function renderResumen(){
   <!-- ===== PARCHE: Limpiar sesión/cookies al cerrar pestaña/ventana ===== -->
   <script>
   
-
 window.addEventListener("beforeunload", () => {
   try { localStorage.clear(); sessionStorage.clear(); } catch(e){}
   try {
@@ -991,7 +998,6 @@ window.addEventListener("beforeunload", () => {
   } catch(_) {}
 });
 </script>
-
 
 </body>
 </html>
