@@ -1062,6 +1062,12 @@ window.addEventListener('unhandledrejection', (e) => {
 
 
 
+
+// Helpers de estado final para Resumen
+function isFinalOP(r){
+  const s = String((r && r.estado) || '').toLowerCase().trim();
+  return s.includes('final') || s.includes('termin');
+}
 function renderResumen(){
   const tbody = document.querySelector('#tbl-resumen tbody');
   if(!tbody) return;
@@ -1075,9 +1081,7 @@ function renderResumen(){
   const fdesde = (fdesdeEl && fdesdeEl.value ? fdesdeEl.value : '').trim();
   const fhasta = (fhastaEl && fhastaEl.value ? fhastaEl.value : '').trim();
 
-  const rowsAll = (cache.produccion||[]).filter(function(r){
-    return String(r.estado||'').toLowerCase().includes('final');
-  });
+  const rowsAll = (cache.produccion||[]).filter(isFinalOP);
 
   function inRange(d){
     if(!d) return true;
