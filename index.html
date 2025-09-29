@@ -274,6 +274,30 @@
   const { createClient } = window.supabase;
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// === Helper: envoltorio seguro para acciones async ===
+function safeAsync(fn){
+  return async (...args)=>{
+    try { return await fn(...args); }
+    catch(err){
+      try { console.error(err); } catch(_){}
+      try { toast(err?.message || String(err)); } catch(_){ alert(String(err)); }
+      return null;
+    }
+  };
+}
+
+
+// -- Botón Cerrar sesión (robusto)
+document.addEventListener("DOMContentLoaded", ()=>{
+  const b = document.getElementById("btn-logout");
+  if(b) b.onclick = safeAsync(async ()=>{
+    await supabase.auth.signOut();
+    showLogin();
+    toast("Sesión cerrada");
+  });
+});
+
+
 // === Debounce para evitar carreras de updates ===
 const _debounces = {};
 function debounceSave(fn, key, ms=300){
@@ -319,7 +343,7 @@ function debounceSave(fn, key, ms=300){
   };
   $('btn-logout').onclick = async ()=>{ await supabase.auth.signOut(); showLogin(); };
   supabase.auth.onAuthStateChange(async (ev, session)=>{
-    if(ev==='SIGNED_IN' && session?.user){ await ensureBootstrap(session.user); await afterAuth(session.user); }
+    if(ev==='SIGNED_IN' && session?.user){ await ensureBootstrap(session.user); await afterAuth(session.user); try{ wireEnvaseDescripcion(); }catch(_){ } }
     if(ev==='SIGNED_OUT'){ showLogin(); }
   });
   async function ensureBootstrap(user){
@@ -819,8 +843,21 @@ function debounceSave(fn, key, ms=300){
         </tbody>
       </table>
       <div class="total">TOTAL: $ ${fmt2(total)}</div>
-      <script>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script>
-    </body></html>`;
+      <scr${''}ipt>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script>
+    
+<scr${''}ipt>
+// Captura global de errores para evitar que la app "se congele"
+window.addEventListener('error', (e) => {
+  try { console.error(e.error || e.message); } catch(_) {}
+  try { toast('Error: ' + (e.error?.message || e.message)); } catch(_) { alert(e.message); }
+});
+window.addEventListener('unhandledrejection', (e) => {
+  try { console.error(e.reason); } catch(_) {}
+  try { toast('Error: ' + (e.reason?.message || e.reason)); } catch(_) { alert(e.reason); }
+});
+</scr${''}ipt>
+
+</body></html>`;
 
     const w = window.open('','_blank');
     w.document.open(); w.document.write(html); w.document.close();
@@ -930,7 +967,20 @@ function renderResumen(){
     <h1>Pendientes de compra – Tu PyME</h1><div class="sub">Generado ${new Date().toLocaleString()}</div>
     <table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Código</th><th>Descripción</th><th>Pedida</th><th>Recibido</th><th>Pendiente</th><th>Unidad</th><th>Precio</th><th>Subtotal</th><th>Bulto</th><th>Calidad</th><th>Envase</th><th>Kg</th><th>Respa</th></tr></thead><tbody>${
       data.map(p=>`<tr><td>${p.fecha}</td><td>${p.prov||''}</td><td>${p.codigo}</td><td>${p.descripcion||''}</td><td class="right">${p.cant}</td><td class="right">${p.recibido??''}</td><td class="right">${fmt2(Math.max(0,(+p.cant||0)-(+p.recibido||0)))}</td><td>${p.unidad||''}</td><td class="right">${fmt2(+p.precio||0)}</td><td class="right">${fmt2((+p.precio||0)*(+p.cant||0))}</td><td class="right">${p.bulto!=null?fmt2(p.bulto):''}</td><td>${escapeHtml(p.calidad||'')}</td><td>${escapeHtml(p.envase||'')}</td><td class="right">${p.kg!=null?fmt2(p.kg):''}</td><td>${escapeHtml(p.respa||'')}</td></tr>`).join('')
-    }</tbody></table><script>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script></body></html>`;
+    }</tbody></table><scr${''}ipt>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script>
+<scr${''}ipt>
+// Captura global de errores para evitar que la app "se congele"
+window.addEventListener('error', (e) => {
+  try { console.error(e.error || e.message); } catch(_) {}
+  try { toast('Error: ' + (e.error?.message || e.message)); } catch(_) { alert(e.message); }
+});
+window.addEventListener('unhandledrejection', (e) => {
+  try { console.error(e.reason); } catch(_) {}
+  try { toast('Error: ' + (e.reason?.message || e.reason)); } catch(_) { alert(e.reason); }
+});
+</scr${''}ipt>
+
+</body></html>`;
     const w=window.open('','_blank'); w.document.open(); w.document.write(html); w.document.close();
   };
 
@@ -988,16 +1038,27 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
 
   <!-- ===== PARCHE: Limpiar sesión/cookies al cerrar pestaña/ventana ===== -->
   <script>
-  
-window.addEventListener("beforeunload", () => {
-  try { localStorage.clear(); sessionStorage.clear(); } catch(e){}
-  try {
-    document.cookie.split(";").forEach(c => {
-      document.cookie = c.trim().split("=")[0] + "=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/";
-    });
-  } catch(_) {}
-});
-</script>
+  window.addEventListener("beforeunload", () => {
+    try { localStorage.clear(); sessionStorage.clear(); } catch(e){}
+    try {
+      document.cookie.split(";").forEach(c => {
+        document.cookie = c.trim().split("=")[0] + "=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/";
+      });
+    } catch(_) {}
+  });
 
+  // Captura global de errores para evitar que la app “se congele”
+  window.addEventListener('error', function (e) {
+    try { console.error(e.error || e.message); } catch(_) {}
+    try { toast('Error: ' + ((e.error && e.error.message) ? e.error.message : e.message)); }
+    catch(_) { alert((e.error && e.error.message) ? e.error.message : e.message); }
+  });
+
+  window.addEventListener('unhandledrejection', function (e) {
+    try { console.error(e.reason); } catch(_) {}
+    const msg = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
+    try { toast('Error: ' + msg); } catch(_) { alert(msg); }
+  });
+  </script>
 </body>
 </html>
