@@ -139,7 +139,7 @@
       <table id="tbl-envases">
         <thead>
           <tr>
-            <th>Código</th><th>Descripción</th><th>Stock</th><th>Unidad</th><th>Pto. Reposición</th><th>Alerta</th>
+            <th>Código</th><th>Descripción</th><th>Stock</th><th>Unidad</th><th>Pto. Reposición</th><th>Alerta</th><th>Acciones</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -521,18 +521,27 @@ function debounceSave(fn, key, ms=300){
     if(error) return toast(error.message);
     row.repo=Number(val)||0;
   }; }
+  
   function renderEnvasesStock(){
     const tbody=document.querySelector('#tbl-envases tbody');
     const rows = cache.envases.map(e=>{
       const alert = (e.repo && (Number(e.stock)||0)<=e.repo) ? '⚠️ Bajo' : '';
       return `<tr>
-        <td>${e.codigo}</td><td>${e.descripcion}</td><td>${fmt2(+e.stock||0)}</td><td>${e.unidad||''}</td>
+        <td>${e.codigo}</td>
+        <td>${e.descripcion}</td>
+        <td>${fmt2(+e.stock||0)}</td>
+        <td>${e.unidad||''}</td>
         <td><input type="number" min="0" step="0.01" value="${e.repo||0}" style="width:110px" oninput="(${setRepoEnvase.toString()})('${e.codigo}')(this.value)"></td>
         <td>${alert}</td>
+        <td class="right">
+          <button class="ok" onclick="(${ajusteEnvaseManual.toString()})('${e.codigo}', +1)()">+ Agregar</button>
+          <button class="warn" onclick="(${ajusteEnvaseManual.toString()})('${e.codigo}', -1)()">− Quitar</button>
+        </td>
       </tr>`;
     }).join('');
-    tbody.innerHTML = rows || `<tr><td colspan="6" class="muted">Sin envases</td></tr>`;
+    tbody.innerHTML = rows || `<tr><td colspan="7" class="muted">Sin envases</td></tr>`;
   }
+
 
   /* === NUEVO: Ajuste de stock de Envases (+ historial opcional) === */
   async function sbAdjustEnvaseStock(codigo, delta, motivo){
@@ -563,6 +572,18 @@ function debounceSave(fn, key, ms=300){
     return { ok:true, stock:nuevo };
   }
 
+
+  // Ajuste manual de envases (desde la tabla)
+  function ajusteEnvaseManual(codigo, signo){
+    return async ()=>{
+      const txt = prompt(`Cantidad a ${signo>0?'AGREGAR':'QUITAR'} para ${codigo}:`, '0');
+      const qty = Number((txt||'').replace(',','.'));
+      if(!isFinite(qty) || qty<=0) return;
+      await sbAdjustEnvaseStock(codigo, signo*qty, `Ajuste manual (${signo>0?'+':'-'}${qty})`);
+      await loadAll(); renderEnvasesStock();
+      toast('Stock de envases actualizado');
+    };
+  }
   /* ===== Pedidos ===== */
   $('p-codigo').addEventListener('blur', ()=>{
     const p=prodByCode(($('p-codigo').value||'').trim().toLowerCase());
@@ -733,6 +754,18 @@ function debounceSave(fn, key, ms=300){
     await sbConsumeStock(o.ins, o.ins_cant, 'Consumo producción');
     const org=cache.org.id;
     const { data:insOP, error } = await supabase.from('produccion').insert({ org_id:org, ...o, consumo_aplicado:o.ins_cant }).select().single();
+    // === Consumo de ENVASES por OP (usa "bulto" como cantidad de envases) ===
+    try{
+      const existeEnvase = cache.envases.some(e => (e.codigo||'').toLowerCase() === String(o.envase||'').toLowerCase());
+      const bultos = Number(o.bulto||0);
+      if (existeEnvase && bultos > 0 && insOP?.id){
+        await sbAdjustEnvaseStock(o.envase, -bultos, `Consumo envase OP ${insOP.id}`);
+        try{
+          await supabase.from('produccion').update({ env_bulto_aplicado: bultos }).eq('id', insOP.id);
+        }catch(_){}
+      }
+    }catch(e){ console.error(e); toast('No se pudo aplicar consumo de envases'); }
+
     if(error) return toast(error.message);
     if(o.estado==='Terminado') await upsertResumenFromOP(insOP);
     await loadAll(); renderProduccion(); renderStock(); renderHistorial(); renderResumen(); toast('Orden creada');
@@ -762,7 +795,16 @@ function debounceSave(fn, key, ms=300){
   function delOP(id){ return async ()=>{
     const o=cache.prod.find(x=>x.id===id); if(!o) return;
     if(o.consumo_aplicado){ await sbUpsertStock({ codigo:o.ins, descripcion:cache.stock[o.ins]?.descripcion||'', unidad:cache.stock[o.ins]?.unidad||'', delta:o.consumo_aplicado, motivo:`Reverso consumo ${id}` }); }
-    await supabase.from('produccion').delete().eq('id',id);
+    
+    // Reversa de consumo de envases si se aplicó
+    try{
+      const existeEnvase = cache.envases.some(e => (e.codigo||'').toLowerCase() === String(o.envase||'').toLowerCase());
+      const bAplic = Number(o.env_bulto_aplicado||0);
+      if (existeEnvase && bAplic > 0){
+        await sbAdjustEnvaseStock(o.envase, +bAplic, `Reversa consumo envase OP ${id}`);
+      }
+    }catch(e){ console.error(e); }
+await supabase.from('produccion').delete().eq('id',id);
     await supabase.from('resumen').delete().eq('id_op',id);
     await loadAll(); renderProduccion(); renderResumen(); renderStock(); renderHistorial(); toast('Orden borrada');
   }; }
