@@ -1213,9 +1213,7 @@ function renderResumen(){
     ].join('');
     kpis.innerHTML = kpiHtml;
   }
-
-
-  // adaptar campos si vienen de resumen (sin estado) o de produccion (con estado)
+// adaptar campos si vienen de resumen (sin estado) o de produccion (con estado)
   const rowsAll = src.filter(function(r){
     if ('estado' in r) return isFinalOP(r);
     return true;
