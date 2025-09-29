@@ -119,6 +119,8 @@ setTimeout(()=>{
   if(l){ l.onclick = ()=>{ if(c) c.value=''; if(d) d.value=''; if(h) h.value=''; renderResumen(); }; }
 })();
 
+
+$('tab-resumen')?.addEventListener('click', ()=>{ renderResumen(); });
 </script>
 </head>
 <body>
@@ -1063,35 +1065,215 @@ window.addEventListener('unhandledrejection', (e) => {
 
 
 
-// Helpers de estado final para Resumen
 function isFinalOP(r){
   const s = String((r && r.estado) || '').toLowerCase().trim();
   return s.includes('final') || s.includes('termin');
 }
+function safeDate10(d){ return (d ? String(d).slice(0,10) : ''); }
+
+
+
+
 function renderResumen(){
-  const tbody = document.querySelector('#tbl-resumen tbody');
+  var tbody = document.querySelector('#tbl-resumen tbody');
   if(!tbody) return;
-  const fmt = (n)=> isFinite(n)? fmt2(n): '0.00';
+  var fmt = function(n){ return isFinite(n)? fmt2(n) : '0.00'; };
 
-  // filtros
-  const fcliEl = document.getElementById('res-f-cli');
-  const fdesdeEl = document.getElementById('res-f-desde');
-  const fhastaEl = document.getElementById('res-f-hasta');
-  const fcli = (fcliEl && fcliEl.value ? fcliEl.value : '').trim().toLowerCase();
-  const fdesde = (fdesdeEl && fdesdeEl.value ? fdesdeEl.value : '').trim();
-  const fhasta = (fhastaEl && fhastaEl.value ? fhastaEl.value : '').trim();
+  // Fuente: cache.resumen si existe; sino cache.produccion
+  var src = (cache.resumen && cache.resumen.length) ? cache.resumen : (cache.produccion || []);
 
-  const rowsAll = (cache.produccion||[]).filter(isFinalOP);
+  // Filtros (usa barra interna; si está vacía intenta con la superior)
+  var fcliEl   = document.getElementById('res-f-cli')   || document.getElementById('r-cli');
+  var fdesdeEl = document.getElementById('res-f-desde') || document.getElementById('r-desde');
+  var fhastaEl = document.getElementById('res-f-hasta') || document.getElementById('r-hasta');
+  var fcli   = (fcliEl   && fcliEl.value   ? fcliEl.value   : '').trim().toLowerCase();
+  var fdesde = (fdesdeEl && fdesdeEl.value ? fdesdeEl.value : '').trim();
+  var fhasta = (fhastaEl && fhastaEl.value ? fhastaEl.value : '').trim();
 
   function inRange(d){
-    if(!d) return true;
-    var x = String(d).slice(0,10);
+    var x = safeDate10(d);
     if(fdesde && x < fdesde) return false;
     if(fhasta && x > fhasta) return false;
     return true;
   }
 
+  // Si viene de produccion, quedate solo con estados finales
+  var rowsAll = src.filter(function(r){
+    if ('estado' in r) return isFinalOP(r);
+    return true;
+  });
+
+  // Aplicar filtros
+  var rows = rowsAll.filter(function(r){
+    var cli = String(r.cliente||'').toLowerCase();
+    var okCli = !fcli || cli.indexOf(fcli) !== -1;
+    var okDate = inRange(r.fecha);
+    return okCli && okDate;
+  });
+
+  var totalPV=0, totalCosto=0, totalMargen=0;
+  var htmlRows = rows.map(function(r){
+    var pv = Number(r.pv_total||0);
+    var cu = Number(r.costo_unit||0);
+    var cant = Number(r.cant||0);
+    var ct = cu * cant;
+    var mg = pv - ct;
+    var pct = pv>0 ? (mg/pv*100) : 0;
+    totalPV += pv; totalCosto += ct; totalMargen += mg;
+
+    return '<tr>'
+      + '<td>' + escapeHtml(safeDate10(r.fecha)) + '</td>'
+      + '<td>' + escapeHtml(r.cliente||'') + '</td>'
+      + '<td>' + escapeHtml(r.prod||r.producto||'') + '</td>'
+      + '<td class="right">' + fmt(cant) + '</td>'
+      + '<td>' + escapeHtml(r.unidad||'') + '</td>'
+      + '<td>' + escapeHtml(r.envase||'') + '</td>'
+      + '<td><input class="money" type="number" step="0.01" value="' + (pv||0) + '" oninput="(function(el,id){ var v=Number(el.value||0); updatePV(id,v); })(this,\'' + (r.id||'') + '\')"></td>'
+      + '<td><input class="money" type="number" step="0.01" value="' + (cu||0) + '" oninput="(function(el,id){ var v=Number(el.value||0); updateCU(id,v); })(this,\'' + (r.id||'') + '\')"></td>'
+      + '<td class="right">' + fmt(ct) + '</td>'
+      + '<td class="right">' + fmt(mg) + '</td>'
+      + '<td class="right">' + fmt2(pct) + '%</td>'
+      + '<td class="right">' + fmt(r.bulto||0) + '</td>'
+      + '<td>' + escapeHtml(r.calidad||'') + '</td>'
+      + '<td class="right">' + fmt(r.kg||0) + '</td>'
+      + '<td>' + escapeHtml(r.respa||'') + '</td>'
+      + '<td>' + escapeHtml(r.obs||'') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  tbody.innerHTML = htmlRows || '<tr><td colspan="16" class="muted">Sin órdenes finalizadas</td></tr>';
+
+  // KPIs
+  var kpis = document.getElementById('resumen-kpis');
+  if(kpis){
+    var pctG = totalPV>0 ? (totalMargen/totalPV*100) : 0;
+    var kpiHtml = [
+      '<div class="kpi"><span>Venta</span><b>$ ' + fmt(totalPV) + '</b></div>',
+      '<div class="kpi"><span>Costo</span><b>$ ' + fmt(totalCosto) + '</b></div>',
+      '<div class="kpi"><span>Margen</span><b>$ ' + fmt(totalMargen) + '</b> <span>' + fmt2(pctG) + '%</span></div>'
+    ].join('');
+    kpis.innerHTML = kpiHtml;
+  }
+}
+
+
+  // si viene de produccion, quedate solo con estados finales
+  var rowsAll = src.filter(function(r){
+    if ('estado' in r) return isFinalOP(r);
+    return true;
+  });
+
+  var rows = rowsAll.filter(function(r){
+    var cli = String(r.cliente||'').toLowerCase();
+    var okCli = !fcli || cli.indexOf(fcli) !== -1;
+    var okDate = inRange(r.fecha);
+    return okCli && okDate;
+  });
+
+  var totalPV=0, totalCosto=0, totalMargen=0;
+  var htmlRows = rows.map(function(r){
+    var pv = Number(r.pv_total||0);
+    var cu = Number(r.costo_unit||0);
+    var cant = Number(r.cant||0);
+    var ct = cu * cant;
+    var mg = pv - ct;
+    var pct = pv>0 ? (mg/pv*100) : 0;
+    totalPV += pv; totalCosto += ct; totalMargen += mg;
+
+    return '<tr>'
+      + '<td>' + escapeHtml(safeDate10(r.fecha)) + '</td>'
+      + '<td>' + escapeHtml(r.cliente||'') + '</td>'
+      + '<td>' + escapeHtml(r.prod||r.producto||'') + '</td>'
+      + '<td class="right">' + fmt(cant) + '</td>'
+      + '<td>' + escapeHtml(r.unidad||'') + '</td>'
+      + '<td>' + escapeHtml(r.envase||'') + '</td>'
+      + '<td><input class="money" type="number" step="0.01" value="' + (pv||0) + '" oninput="(function(el,id){ var v=Number(el.value||0); updatePV(id,v); })(this,\'' + (r.id||'') + '\')"></td>'
+      + '<td><input class="money" type="number" step="0.01" value="' + (cu||0) + '" oninput="(function(el,id){ var v=Number(el.value||0); updateCU(id,v); })(this,\'' + (r.id||'') + '\')"></td>'
+      + '<td class="right">' + fmt(ct) + '</td>'
+      + '<td class="right">' + fmt(mg) + '</td>'
+      + '<td class="right">' + fmt2(pct) + '%</td>'
+      + '<td class="right">' + fmt(r.bulto||0) + '</td>'
+      + '<td>' + escapeHtml(r.calidad||'') + '</td>'
+      + '<td class="right">' + fmt(r.kg||0) + '</td>'
+      + '<td>' + escapeHtml(r.respa||'') + '</td>'
+      + '<td>' + escapeHtml(r.obs||'') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  tbody.innerHTML = htmlRows || '<tr><td colspan="16" class="muted">Sin órdenes finalizadas</td></tr>';
+
+  // KPIs
+  var kpis = document.getElementById('resumen-kpis');
+  if(kpis){
+    var pctG = totalPV>0 ? (totalMargen/totalPV*100) : 0;
+    var kpiHtml = [
+      '<div class="kpi"><span>Venta</span><b>$ ' + fmt(totalPV) + '</b></div>',
+      '<div class="kpi"><span>Costo</span><b>$ ' + fmt(totalCosto) + '</b></div>',
+      '<div class="kpi"><span>Margen</span><b>$ ' + fmt(totalMargen) + '</b> <span>' + fmt2(pctG) + '%</span></div>'
+    ].join('');
+    kpis.innerHTML = kpiHtml;
+  }
+
+
+  // adaptar campos si vienen de resumen (sin estado) o de produccion (con estado)
+  const rowsAll = src.filter(function(r){
+    if ('estado' in r) return isFinalOP(r);
+    return true;
+  });
+
   const rows = rowsAll.filter(function(r){
+    const cli = String(r.cliente||'').toLowerCase();
+    const okCli = !fcli || cli.includes(fcli);
+    const okDate = inRange(r.fecha);
+    return okCli && okDate;
+  });
+
+  let totalPV=0, totalCosto=0, totalMargen=0;
+  const htmlRows = rows.map(function(r){
+    const pv = Number(r.pv_total||0);
+    const cu = Number(r.costo_unit||0);
+    const cant = Number(r.cant||0);
+    const ct = cu * cant;
+    const mg = pv - ct;
+    const pct = pv>0 ? (mg/pv*100) : 0;
+    totalPV += pv; totalCosto += ct; totalMargen += mg;
+
+    return '<tr>'
+      + '<td>' + escapeHtml(safeDate10(r.fecha)) + '</td>'
+      + '<td>' + escapeHtml(r.cliente||'') + '</td>'
+      + '<td>' + escapeHtml(r.prod||r.producto||'') + '</td>'
+      + '<td class="right">' + fmt(cant) + '</td>'
+      + '<td>' + escapeHtml(r.unidad||'') + '</td>'
+      + '<td>' + escapeHtml(r.envase||'') + '</td>'
+      + '<td><input class="money" type="number" step="0.01" value="' + (pv||0) + '" oninput="(function(el,id){ var v=Number(el.value||0); updatePV(id,v); })(this,\'' + (r.id||'') + '\')"></td>'
+      + '<td><input class="money" type="number" step="0.01" value="' + (cu||0) + '" oninput="(function(el,id){ var v=Number(el.value||0); updateCU(id,v); })(this,\'' + (r.id||'') + '\')"></td>'
+      + '<td class="right">' + fmt(ct) + '</td>'
+      + '<td class="right">' + fmt(mg) + '</td>'
+      + '<td class="right">' + fmt2(pct) + '%</td>'
+      + '<td class="right">' + fmt(r.bulto||0) + '</td>'
+      + '<td>' + escapeHtml(r.calidad||'') + '</td>'
+      + '<td class="right">' + fmt(r.kg||0) + '</td>'
+      + '<td>' + escapeHtml(r.respa||'') + '</td>'
+      + '<td>' + escapeHtml(r.obs||'') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  tbody.innerHTML = htmlRows || '<tr><td colspan="16" class="muted">Sin órdenes finalizadas</td></tr>';
+
+  
+// KPIs
+var kpis = document.getElementById('resumen-kpis');
+if(kpis){
+  var pctG = totalPV>0 ? (totalMargen/totalPV*100) : 0;
+  var kpiHtml = [
+    '<div class="kpi"><span>Venta</span><b>$ ' + fmt(totalPV) + '</b></div>',
+    '<div class="kpi"><span>Costo</span><b>$ ' + fmt(totalCosto) + '</b></div>',
+    '<div class="kpi"><span>Margen</span><b>$ ' + fmt(totalMargen) + '</b> <span>' + fmt2(pctG) + '%</span></div>'
+  ].join('');
+  kpis.innerHTML = kpiHtml;
+}
+
+const rows = rowsAll.filter(function(r){
     var cli = String(r.cliente||'').toLowerCase();
     var okCli = !fcli || cli.includes(fcli);
     var okDate = inRange(r.fecha);
@@ -1134,26 +1316,20 @@ function renderResumen(){
     tbody.innerHTML = '<tr><td colspan="16" class="muted">Sin órdenes finalizadas</td></tr>';
   }
 
-  // KPIs
-  var kpis = document.getElementById('resumen-kpis');
-  if(kpis){
-    var pctG = totalPV>0 ? (totalMargen/totalPV*100) : 0;
-    var kpiHtml = ''
-      + '<div class="kpi"><span>Venta</span><b>$ ' + fmt(totalPV) + '</b></div>'
-      + '<div class="kpi"><span>Costo</span><b>$ ' + fmt(totalCosto) + '</b></div>'
-      + '<div class="kpi"><span>Margen</span><b>$ ' + fmt(totalMargen) + '</b> <span>' + fmt2(pctG) + '%</span></div>';
-    kpis.innerHTML = kpiHtml;
-  }
+  
+// KPIs
+var kpis = document.getElementById('resumen-kpis');
+if(kpis){
+  var pctG = totalPV>0 ? (totalMargen/totalPV*100) : 0;
+  var kpiHtml = [
+    '<div class="kpi"><span>Venta</span><b>$ ' + fmt(totalPV) + '</b></div>',
+    '<div class="kpi"><span>Costo</span><b>$ ' + fmt(totalCosto) + '</b></div>',
+    '<div class="kpi"><span>Margen</span><b>$ ' + fmt(totalMargen) + '</b> <span>' + fmt2(pctG) + '%</span></div>'
+  ].join('');
+  kpis.innerHTML = kpiHtml;
 }
 
-
-
-
-
-
-
-
-  /* ===== Pendientes ===== */
+/* ===== Pendientes ===== */
   function getPendientes(){
     const prov=($('pp-prov').value||'').toLowerCase(), d1=$('pp-desde').value||null, d2=$('pp-hasta').value||null;
     return cache.pedidos
