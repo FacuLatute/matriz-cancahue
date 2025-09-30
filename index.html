@@ -377,7 +377,7 @@ document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderRe
         <div class="right" style="align-items:end"><button class="primary" id="btn-print">Imprimir Remito</button>
 <button id="btn-resumen-export" class="ok">Exportar Excel</button></div>
       </div>
-      <table id="tbl-resumen" class="tbl-resumen"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>PV Total</th><th>Costo Unit</th><th>Costo Total</th><th>Margen</th><th>%</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead><tbody></tbody></table>
+      <table id="tbl-resumen" class="tbl-resumen"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>PV Unit</th><th>Costo Unit</th><th>PV Total</th><th>Costo Total</th><th>Margen</th><th>%</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead><tbody></tbody></table>
       <div class="totalbar">Total filtrado: $ <span id="res-total">0.00</span></div>
     </section>
 
@@ -1218,9 +1218,7 @@ const htmlRows = rows.map(function(r){
     <td class="num">${fmt2(cant)}</td>
     <td>${safeEsc(unidad)}</td>
     <td>${safeEsc(envase)}</td>
-    <td class="num">${fmt2(pvTotal)}</td>
-    <td class="num">${fmt2(costoUnit)}</td>
-    <td class="num">${fmt2(costoTotal)}</td>
+    <td class="editable num" contenteditable="true" data-field="pv">${fmt2(pvUnit)}</td><td class="editable num" contenteditable="true" data-field="costoUnit">${fmt2(costoUnit)}</td><td class="num">${fmt2(pvTotal)}</td><td class="num">${fmt2(costoTotal)}</td>
     <td class="num">${fmt2(margen)}</td>
     <td class="num">${fmt2(pct)}</td>
     <td class="editable" contenteditable="true" data-field="bulto">${safeEsc(bulto)}</td>
@@ -1245,14 +1243,21 @@ if (htmlRows) {
       const tr = td.closest('tr');
       const id = tr?.getAttribute('data-id');
       const field = td.getAttribute('data-field');
-      const val = td.textContent.trim();
+      const raw = td.textContent.trim().replace(/\./g,'').replace(',', '.');
+      const isNum = (field==='pv' || field==='costoUnit' || field==='kg' || field==='cantidad');
+      const val = isNum ? (+raw || 0) : td.textContent.trim();
       try {
         // actualizar cache en memoria si existe
         if (Array.isArray(cache.resumen)) {
           const row = cache.resumen.find(x => String(x.id||x.oid||x.pedido||x.remito||'') === String(id));
-          if (row) { row[field] = val; }
+          if (row) {
+            row[field] = val;
+            if(field==='pv') row.precio = val;
+            if(field==='costoUnit') row.costo = val;
+          }
         }
         // si existe una función de persistencia, invocarla sin romper la UI
+        if (typeof upsertResumenSupabase === 'function') { try{ upsertResumenSupabase(row); }catch(_){} }
         if (typeof saveResumenRow === 'function') {
           saveResumenRow({ id, [field]: val });
         }
