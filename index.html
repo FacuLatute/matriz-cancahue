@@ -61,7 +61,30 @@ input.money{width:110px; text-align:right}
 </script>
 <script>
 // Trae datos básicos desde Supabase en caso de que el cache esté vacío (opcional)
+// Carga garantizada de 'produccion' desde Supabase
+async function loadProduccionFromSupabase(){
+  try{
+    if(typeof supabase === 'undefined') return;
+    const { data, error } = await supabase
+      .from('produccion')
+      .select('id, org_id, fecha, cliente, codigo_prod, prod_nombre, cant, unidad, envase, estado, obs, bulto, calidad, kg, respa')
+      .order('fecha', { ascending: true })
+      .limit(5000);
+    if(!error && Array.isArray(data)){
+      cache.produccion = data;
+      // construir resumen derivado si no existe
+      if(!(cache.resumen && cache.resumen.length)){
+        cache.resumen = buildResumenFromProduccion_STRICT();
+      }
+    }else{
+      console.error('Supabase produccion error', error);
+    }
+  }catch(e){ console.error('loadProduccionFromSupabase', e); }
+}
+
 async function ensureDataLoaded(){
+  try{ await loadProduccionFromSupabase(); }catch(_){}
+
   try{
     if(typeof supabase === 'undefined') return;
     if(!(cache.prod || cache.produccion)){
@@ -1150,7 +1173,7 @@ const htmlRows = rows.map(function(r){
   const id = r.id || r.oid || r.pedido || r.remito || '';
   const fecha = r.fecha || r.fec || r.f || r.fechaEntrega || '';
   const cliente = r.cliente || r.cli || '';
-  const producto = r.producto || r.prod || r.descripcion || r.desc || '';
+  const producto = r.prod_nombre || r.producto || r.prod || r.descripcion || r.desc || '';
   const cant = safeNum(r.cantidad || r.cant || r.qty);
   const unidad = r.unidad || r.uni || r.u || '';
   const envase = r.envase || r.pack || r.pallet || '';
