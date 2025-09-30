@@ -1113,31 +1113,87 @@ function renderResumen(){
     return true;
   });
 
-  // totales + render básico de filas (si no hay columnas específicas, evitamos romper)
-  let totalPV = 0, totalCosto = 0, totalMargen = 0;
-  const htmlRows = rows.map(function(r){
-    const pv = +(r.pv || r.precio || r.precioVenta || 0);
-    const cost = +(r.costo || r.cost || 0);
-    const mg = pv - cost;
-    totalPV += pv; totalCosto += cost; totalMargen += mg;
-    // Si no conocemos el layout exacto de columnas, devolvemos una fila mínima y no rompemos el DOM
-    return `<tr>
-      <td>${r.fecha || r.fec || r.f || ''}</td>
-      <td>${r.cliente || r.cli || ''}</td>
-      <td>${r.codigo || r.cod || ''}</td>
-      <td class="num">${fmt2(pv)}</td>
-      <td class="num">${fmt2(cost)}</td>
-      <td class="num">${fmt2(mg)}</td>
-    </tr>`;
-  }).join('');
+  // totales + render de filas completo (con celdas editables a la derecha)
+let totalPV = 0, totalCosto = 0, totalMargen = 0;
 
-  if (htmlRows) {
-    tbody.innerHTML = htmlRows;
-  } else {
-    tbody.innerHTML = '<tr><td colspan="16" class="muted">Sin órdenes finalizadas</td></tr>';
-  }
+function safeNum(x){ const n = +x; return isFinite(n) ? n : 0; }
 
-  // KPIs
+const htmlRows = rows.map(function(r){
+  const id = r.id || r.oid || r.pedido || r.remito || '';
+  const fecha = r.fecha || r.fec || r.f || r.fechaEntrega || '';
+  const cliente = r.cliente || r.cli || '';
+  const producto = r.producto || r.prod || r.descripcion || r.desc || '';
+  const cant = safeNum(r.cantidad || r.cant || r.qty);
+  const unidad = r.unidad || r.uni || r.u || '';
+  const envase = r.envase || r.pack || r.pallet || '';
+  const pvUnit = safeNum(r.pv || r.precio || r.precioVenta);
+  const costoUnit = safeNum(r.costo || r.cost);
+  const pvTotal = pvUnit * (cant || 1);
+  const costoTotal = costoUnit * (cant || 1);
+  const margen = pvTotal - costoTotal;
+  const pct = pvTotal>0 ? (margen/pvTotal*100) : 0;
+
+  totalPV += pvTotal;
+  totalCosto += costoTotal;
+  totalMargen += margen;
+
+  // columnas editables (derecha)
+  const bulto = r.bulto ?? r.bultos ?? '';
+  const calidad = r.calidad ?? '';
+  const kg = r.kg ?? r.kilos ?? '';
+  const respa = r.respa ?? r.responsable ?? '';
+  const obs = r.obs ?? r.observaciones ?? '';
+
+  return `<tr data-id="${id}">
+    <td>${fecha}</td>
+    <td>${esc(cliente)}</td>
+    <td>${esc(producto)}</td>
+    <td class="num">${fmt2(cant)}</td>
+    <td>${esc(unidad)}</td>
+    <td>${esc(envase)}</td>
+    <td class="num">${fmt2(pvTotal)}</td>
+    <td class="num">${fmt2(costoUnit)}</td>
+    <td class="num">${fmt2(costoTotal)}</td>
+    <td class="num">${fmt2(margen)}</td>
+    <td class="num">${fmt2(pct)}</td>
+    <td class="editable" contenteditable="true" data-field="bulto">${esc(bulto)}</td>
+    <td class="editable" contenteditable="true" data-field="calidad">${esc(calidad)}</td>
+    <td class="editable" contenteditable="true" data-field="kg">${esc(kg)}</td>
+    <td class="editable" contenteditable="true" data-field="respa">${esc(respa)}</td>
+    <td class="editable" contenteditable="true" data-field="obs">${esc(obs)}</td>
+  </tr>`;
+}).join('');
+
+if (htmlRows) {
+  tbody.innerHTML = htmlRows;
+} else {
+  tbody.innerHTML = '<tr><td colspan="16" class="muted">Sin órdenes finalizadas</td></tr>';
+}
+
+// habilitar edición local de las celdas derechas
+(function attachResumenEditors(){
+  const table = tbody.closest('table') || document;
+  table.querySelectorAll('td.editable[contenteditable="true"]').forEach(function(td){
+    td.addEventListener('blur', function(){
+      const tr = td.closest('tr');
+      const id = tr?.getAttribute('data-id');
+      const field = td.getAttribute('data-field');
+      const val = td.textContent.trim();
+      try {
+        // actualizar cache en memoria si existe
+        if (Array.isArray(cache.resumen)) {
+          const row = cache.resumen.find(x => String(x.id||x.oid||x.pedido||x.remito||'') === String(id));
+          if (row) { row[field] = val; }
+        }
+        // si existe una función de persistencia, invocarla sin romper la UI
+        if (typeof saveResumenRow === 'function') {
+          saveResumenRow({ id, [field]: val });
+        }
+      } catch(_) {}
+    });
+  });
+})();
+// KPIs
   const kpis = document.getElementById('resumen-kpis');
   if(kpis){
     const pctG = totalPV>0 ? (totalMargen/totalPV*100) : 0;
