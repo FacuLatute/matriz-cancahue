@@ -173,7 +173,7 @@ setTimeout(()=>{
 document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderResumen() });
 </script>
 </head>
-\1
+<body>
 <script>
 // Bootstrap utils BEFORE everything else
 (function(){
@@ -377,7 +377,7 @@ document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderRe
         <div class="right" style="align-items:end"><button class="primary" id="btn-print">Imprimir Remito</button>
 <button id="btn-resumen-export" class="ok">Exportar Excel</button></div>
       </div>
-      <table id="tbl-resumen" class="tbl-resumen"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>PV Unit</th><th>Costo Unit</th><th>PV Total</th><th>Costo Total</th><th>Margen</th><th>%</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead><tbody></tbody></table>
+      <table id="tbl-resumen" class="tbl-resumen"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Costo Unit</th><th>PV Total</th><th>Costo Total</th><th>Margen</th><th>%</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead><tbody></tbody></table>
       <div class="totalbar">Total filtrado: $ <span id="res-total">0.00</span></div>
     </section>
 
@@ -1028,79 +1028,98 @@ await supabase.from('produccion').delete().eq('id',id);
   }
 
   /* ===== Resumen / Remito ===== */
-  $('btn-print').onclick = ()=>{
-    if(!can('resumen_print')) return toast('Sin permiso');
-    const data = filtroResumen(); if(!data.length) return toast('Sin datos');
+  
+$('btn-print').onclick = async ()=>{
+  if(!can('resumen_print')) return toast('Sin permiso');
+  const rows = filtroResumen();
+  if(!rows.length) return toast('Sin datos');
 
-    const cliente = ($('f-cli').value||'').trim(),
-          d1 = $('f-desde').value || '',
-          d2 = $('f-hasta').value || '',
-          total = data.reduce((a,x)=>a+(+x.precio_total||0),0);
+  // Persistir filas y normalizar
+  for(const r of rows){
+    const cant = +(r.cantidad||r.cant||1)||1;
+    const pvTot = +(r.precio_total || (+(r.pv||r.precio||0)*cant) || 0);
+    r.precio_total = pvTot;
+    r.pv = cant ? (pvTot / cant) : (r.pv||0);
+    try{ await upsertResumenSupabase(r); }catch(_){}
+  }
 
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito</title>
-    <style>
-      body{font-family:Arial;margin:28px;color:#111}
-      h1{margin:0 0 6px;font-size:22px}
-      .sub{color:#444;font-size:12px;margin-bottom:12px}
-      .meta{display:flex;justify-content:space-between;margin:12px 0 16px;font-size:14px}
-      .box{border:1px solid #ccc;padding:10px;border-radius:8px}
-      table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
-      th,td{border:1px solid #ddd;padding:8px}
-      th{background:#f5f5f5;text-align:left}
-      .right{text-align:right}
-      .total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}
-      @media print{@page{size:A4 portrait;margin:20mm}}
-    </style></head><body>
-      <h1>Remito – Tu PyME</h1>
-      <div class="sub">Generado ${new Date().toLocaleString()}</div>
-      <div class="meta">
-        <div class="box">
-          <div><b>Cliente:</b> ${escapeHtml(cliente||'Varios')}</div>
-          <div><b>Rango:</b> ${d1||'—'} a ${d2||'—'}</div>
-        </div>
-        <div class="box"><div><b>N°:</b> REM-${Date.now()}</div></div>
+  const totalPV    = rows.reduce((a,r)=> a + (+(r.precio_total||0)), 0);
+  const totalCosto = rows.reduce((a,r)=> a + (+(r.costoUnit||r.costo||0) * (+(r.cantidad||r.cant||1)||1)), 0);
+  const totalMargen= totalPV - totalCosto;
+  const pctG       = totalPV>0 ? (totalMargen/totalPV*100) : 0;
+
+  let remitoId = null;
+  try{ remitoId = await createRemitoHeader({ numero:null, fecha:new Date().toISOString(), total_venta:totalPV, total_costo:totalCosto, total_margen:totalMargen, pct:pctG, org_id: rows[0]?.org_id||null }); }catch(_){}
+
+  const cliente = ($('f-cli').value||'').trim();
+  const d1 = $('f-desde').value || '';
+  const d2 = $('f-hasta').value || '';
+
+  const fmt = n => (new Intl.NumberFormat('es-AR',{minimumFractionDigits:2, maximumFractionDigits:2})).format(+n||0);
+  const nowStr = new Date().toLocaleString();
+
+  const tbody = rows.map(o=>{
+    const cant = +(o.cantidad||o.cant||1)||1;
+    const costoUnit = +(o.costoUnit||o.costo||0);
+    const costoTotal = costoUnit * cant;
+    const pvTot = +(o.precio_total||0);
+    const margen = pvTot - costoTotal;
+    const pct = pvTot>0 ? (margen/pvTot*100) : 0;
+    return `<tr>
+      <td>${(o.fecha||'').slice(0,10)}</td>
+      <td>${esc(o.prod_nombre||'')}</td>
+      <td class="right">${fmt(cant)}</td>
+      <td>${esc(o.unidad||'')}</td>
+      <td>${esc(o.envase||'')}</td>
+      <td class="right">${fmt(pvTot)}</td>
+      <td class="right">${fmt(costoTotal)}</td>
+      <td class="right">${fmt(margen)}</td>
+      <td class="right">${fmt(pct)}</td>
+      <td class="right">${o.bulto!=null?fmt(o.bulto):''}</td>
+      <td>${esc(o.calidad||'')}</td>
+      <td class="right">${o.kg!=null?fmt(o.kg):''}</td>
+      <td>${esc(o.respa||'')}</td>
+      <td>${esc(o.obs||'')}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Remito ${remitoId?('#'+remitoId):''}</title>
+  <style>
+    body{font-family:Arial;margin:24px;color:#111}
+    h1{margin:0 0 6px;font-size:22px}
+    .sub{color:#444;font-size:12px;margin-bottom:12px}
+    .meta{display:flex;justify-content:space-between;margin:12px 0 16px;font-size:14px}
+    .box{border:1px solid #ccc;padding:10px;border-radius:8px}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+    th,td{border:1px solid #ddd;padding:8px}
+    th{background:#f5f5f5;text-align:left}
+    .right{text-align:right}
+    .total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}
+    @media print{@page{size:A4 portrait;margin:20mm}}
+  </style></head><body>
+    <h1>Remito ${remitoId?('#'+remitoId):''} – Tu PyME</h1>
+    <div class="sub">Generado ${nowStr}</div>
+    <div class="meta">
+      <div class="box">
+        <div><b>Cliente:</b> ${esc(cliente||'Varios')}</div>
+        <div><b>Rango:</b> ${d1||'—'} a ${d2||'—'}</div>
       </div>
-      <table>
-        <thead>
-          <tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Precio Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr>
-        </thead>
-        <tbody>
-          ${data.map(o=>`
-            <tr>
-              <td>${o.fecha}</td>
-              <td>${escapeHtml(o.prod_nombre||'')}</td>
-              <td class="right">${o.cant}</td>
-              <td>${escapeHtml(o.unidad||'')}</td>
-              <td>${escapeHtml(o.envase||'')}</td>
-              <td class="right">${fmt2(o.precio_total||0)}</td>
-              <td class="right">${o.bulto!=null?fmt2(o.bulto):''}</td>
-              <td>${escapeHtml(o.calidad||'')}</td>
-              <td class="right">${o.kg!=null?fmt2(o.kg):''}</td>
-              <td>${escapeHtml(o.respa||'')}</td>
-              <td>${escapeHtml(o.obs||'')}</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-      <div class="total">TOTAL: $ ${fmt2(total)}</div>
-      <scr${''}ipt>window.onload=function(){window.print();setTimeout(()=>window.close(),300);}<\/script>
-    
-<scr${''}ipt>
-// Captura global de errores para evitar que la app "se congele"
-window.addEventListener('error', (e) => {
-  try { console.error(e.error || e.message); } catch(_) {}
-  try { toast('Error: ' + (e.error?.message || e.message)); } catch(_) { alert(e.message); }
-});
-window.addEventListener('unhandledrejection', (e) => {
-  try { console.error(e.reason); } catch(_) {}
-  try { toast('Error: ' + (e.reason?.message || e.reason)); } catch(_) { alert(e.reason); }
-});
-</scr${''}ipt>
+      <div class="box"><div><b>Total Venta:</b> $ ${fmt(totalPV)}</div></div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>PV Total</th><th>Costo Total</th><th>Margen</th><th>%</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr>
+      </thead>
+      <tbody>${tbody}</tbody>
+    </table>
+    <div class="total">Venta: $ ${fmt(totalPV)} &nbsp;|&nbsp; Costo: $ ${fmt(totalCosto)} &nbsp;|&nbsp; Margen: $ ${fmt(totalMargen)} (${fmt(pctG)}%)</div>
+    <scr${''}ipt>window.onload=function(){window.print();setTimeout(()=>window.close(),400);}</scr${''}ipt>
+  </body></html>`;
 
-</body></html>`;
+  const w = window.open('','_blank');
+  w.document.open(); w.document.write(html); w.document.close();
+};
 
-    const w = window.open('','_blank');
-    w.document.open(); w.document.write(html); w.document.close();
-  };
 
   function filtroResumen(){
     const cli = ($('f-cli').value||'').toLowerCase();
@@ -1139,6 +1158,48 @@ function isFinalOP(r){
 }
 function safeDate10(d){ return (d ? String(d).slice(0,10) : ''); }
 
+
+
+async function upsertResumenSupabase(localRow){
+  try{
+    if(typeof supabase==='undefined') return;
+    const rec = {
+      org_id: localRow.org_id || null,
+      id_op:  localRow.id_op || null,
+      fecha:  localRow.fecha || null,
+      cliente: localRow.cliente || '',
+      prod_nombre: localRow.prod_nombre || '',
+      codigo_prod: localRow.codigo_prod || '',
+      cant: +(localRow.cantidad || localRow.cant || 1) || 1,
+      unidad: localRow.unidad || '',
+      envase: localRow.envase || '',
+      obs: localRow.obs || '',
+      precio_total: +(localRow.precio_total || 0),
+      bulto: localRow.bulto ?? '',
+      calidad: localRow.calidad ?? '',
+      kg: +(localRow.kg || 0) || 0,
+      respa: localRow.respa ?? ''
+    };
+    if(localRow.id){
+      await supabase.from('resumen').update(rec).eq('id', localRow.id);
+      return;
+    }
+    if(rec.id_op){
+      const { data: ex } = await supabase.from('resumen').select('id').eq('id_op', rec.id_op).limit(1);
+      if(Array.isArray(ex) && ex.length){ await supabase.from('resumen').update(rec).eq('id', ex[0].id); return; }
+    }
+    await supabase.from('resumen').insert(rec);
+  }catch(e){ console.error('upsertResumenSupabase', e); }
+}
+async function createRemitoHeader({numero, fecha, total_venta, total_costo, total_margen, pct, org_id}){
+  try{
+    if(typeof supabase==='undefined') return null;
+    const rec = { numero: numero||null, fecha: fecha||new Date().toISOString(), total_venta:+(total_venta||0), total_costo:+(total_costo||0), total_margen:+(total_margen||0), pct:+(pct||0), org_id: org_id||null };
+    const { data, error } = await supabase.from('remitos').insert(rec).select('id').single();
+    if(error){ console.warn('remitos insert error', error); return null; }
+    return data?.id || null;
+  }catch(e){ console.error('createRemitoHeader', e); return null; }
+}
 
 function renderResumen(){
   try{ ensureDataLoaded && ensureDataLoaded(); }catch(_){}
@@ -1195,7 +1256,7 @@ const htmlRows = rows.map(function(r){
   const envase = r.envase || r.pack || r.pallet || '';
   const pvUnit = safeNum(r.pv || r.precio || r.precioVenta);
   const costoUnit = safeNum(r.costo || r.cost);
-  const pvTotal = pvUnit * (cant || 1);
+  const pvTotal = +(r.precio_total || (pvUnit * (cant || 1)) || 0);
   const costoTotal = costoUnit * (cant || 1);
   const margen = pvTotal - costoTotal;
   const pct = pvTotal>0 ? (margen/pvTotal*100) : 0;
@@ -1218,7 +1279,7 @@ const htmlRows = rows.map(function(r){
     <td class="num">${fmt2(cant)}</td>
     <td>${safeEsc(unidad)}</td>
     <td>${safeEsc(envase)}</td>
-    <td class="editable num" contenteditable="true" data-field="pv">${fmt2(pvUnit)}</td><td class="editable num" contenteditable="true" data-field="costoUnit">${fmt2(costoUnit)}</td><td class="num">${fmt2(pvTotal)}</td><td class="num">${fmt2(costoTotal)}</td>
+    <td class="editable num" contenteditable="true" data-field="costoUnit">${fmt2(costoUnit)}</td><td class="editable num" contenteditable="true" data-field="precio_total">${fmt2(pvTotal)}</td><td class="num">${fmt2(costoTotal)}</td>
     <td class="num">${fmt2(margen)}</td>
     <td class="num">${fmt2(pct)}</td>
     <td class="editable" contenteditable="true" data-field="bulto">${safeEsc(bulto)}</td>
@@ -1244,7 +1305,7 @@ if (htmlRows) {
       const id = tr?.getAttribute('data-id');
       const field = td.getAttribute('data-field');
       const raw = td.textContent.trim().replace(/\./g,'').replace(',', '.');
-      const isNum = (field==='pv' || field==='costoUnit' || field==='kg' || field==='cantidad');
+      const isNum = (field==='precio_total' || field==='costoUnit' || field==='kg' || field==='cantidad');
       const val = isNum ? (+raw || 0) : td.textContent.trim();
       try {
         // actualizar cache en memoria si existe
@@ -1252,7 +1313,7 @@ if (htmlRows) {
           const row = cache.resumen.find(x => String(x.id||x.oid||x.pedido||x.remito||'') === String(id));
           if (row) {
             row[field] = val;
-            if(field==='pv') row.precio = val;
+            if(field==='precio_total'){ const c=+(row.cantidad||row.cant||1)||1; row.pv = c? (val/c): (row.pv||0); row.precio=row.pv; }
             if(field==='costoUnit') row.costo = val;
           }
         }
