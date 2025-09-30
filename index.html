@@ -1195,7 +1195,7 @@ const htmlRows = rows.map(function(r){
   const respa = r.respa ?? r.responsable ?? '';
   const obs = r.obs ?? r.observaciones ?? '';
 
-  return `<tr data-id="${id}">
+  return `<tr data-id="${id || (r.id || "")}">
     <td>${fecha}</td>
     <td>${esc(cliente)}</td>
     <td>${esc(producto)}</td>
