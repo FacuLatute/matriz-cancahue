@@ -60,6 +60,33 @@ input.money{width:110px; text-align:right}
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js">
 </script>
 <script>
+// Trae datos básicos desde Supabase en caso de que el cache esté vacío (opcional)
+async function ensureDataLoaded(){
+  try{
+    if(typeof supabase === 'undefined') return;
+    if(!(cache.prod || cache.produccion)){
+      const { data, error } = await supabase.from('produccion').select('*').limit(2000);
+      if(!error && Array.isArray(data)) cache.prod = data;
+    }
+    if(!cache.historial){
+      const { data } = await supabase.from('historial').select('*').limit(2000);
+      if(Array.isArray(data)) cache.historial = data;
+    }
+    if(!cache.pedidos){
+      const { data } = await supabase.from('pedidos').select('*').limit(2000);
+      if(Array.isArray(data)) cache.pedidos = data;
+    }
+    if(!cache.compras){
+      const { data } = await supabase.from('compras').select('*').limit(2000);
+      if(Array.isArray(data)) cache.compras = data;
+    }
+    if(!cache.stock){
+      const { data } = await supabase.from('stock').select('*').limit(2000);
+      if(Array.isArray(data)) cache.stock = data;
+    }
+  }catch(e){ console.error('ensureDataLoaded', e); }
+}
+
 async function updatePV(id, value){
   // guarda si existe columna pv_total
   try{ await supabase.from('produccion').update({ pv_total: value }).eq('id', id); }catch(_){}
@@ -1075,6 +1102,7 @@ function safeDate10(d){ return (d ? String(d).slice(0,10) : ''); }
 
 
 function renderResumen(){
+  try{ ensureDataLoaded && ensureDataLoaded(); }catch(_){}
   const tbody = document.querySelector('#tbl-resumen tbody');
   if(!tbody) return;
   const fmt = (n)=> isFinite(n)? fmt2(n): '0.00';
@@ -1337,3 +1365,4 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
   </script>
 </body>
 </html>
+
