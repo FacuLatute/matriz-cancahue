@@ -1287,12 +1287,6 @@ function renderResumen(){
 
     // costo: resumen -> fallback compras
     let costoUnit = safeNum(r.costo || r.costoUnit || r.cost);
-    if(!(costoUnit>0) && codigo){
-      try{
-        const lc = getLastCostFor(codigo);
-        if(lc>0) costoUnit = lc;
-      }catch(_){}
-    }
 
     const pvTotal = +(r.precio_total || 0);
     const costoTotal = costoUnit * cant;
@@ -1303,8 +1297,8 @@ function renderResumen(){
     totalCosto += costoTotal;
     totalMargen += margen;
 
-    const bulto = r.bulto ?? r.bultos ?? '';
-    const calidad = r.calidad ?? '';
+    const bulto = (r.bulto ?? '');
+    const calidad = (r.calidad ?? '');
     const kg = r.kg ?? r.kilos ?? '';
     const respa = r.respa ?? r.responsable ?? '';
     const obs = r.obs ?? r.observaciones ?? '';
@@ -1384,7 +1378,7 @@ function renderResumen(){
 }
 /* ===== Pendientes ===== */
   function getPendientes(){
-    const prov=($('pp-prov').value||'').toLowerCase(), d1=$('pp-desde').value||null, d2=$('pp-hasta').value||null;
+  const prov=(document.getElementById('pp-prov')?.value||'').toLowerCase(), d1=document.getElementById('pp-desde')?.value||null, d2=document.getElementById('pp-hasta')?.value||null;
     return cache.pedidos
       .filter(p=>p.estado!=='Entregado' && p.estado!=='Cancelado')
       .filter(p=>prov?(p.prov||'').toLowerCase().includes(prov):true)
@@ -1515,3 +1509,4 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
   </script>
 </body>
 </html>
+
