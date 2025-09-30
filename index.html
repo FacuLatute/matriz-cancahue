@@ -56,6 +56,7 @@
 .actions-right{display:flex; gap:.5rem; justify-content:flex-end; align-items:center;}
 input.money{width:110px; text-align:right}
 
+td.editable { white-space: nowrap; }
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js">
 </script>
@@ -1096,7 +1097,8 @@ $('btn-print').onclick = async ()=>{
     .right{text-align:right}
     .total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}
     @media print{@page{size:A4 portrait;margin:20mm}}
-  </style></head><body>
+  td.editable { white-space: nowrap; }
+</style></head><body>
     <h1>Remito ${remitoId?('#'+remitoId):''} – Tu PyME</h1>
     <div class="sub">Generado ${nowStr}</div>
     <div class="meta">
@@ -1300,6 +1302,8 @@ if (htmlRows) {
 (function attachResumenEditors(){
   const table = tbody.closest('table') || document;
   table.querySelectorAll('td.editable[contenteditable="true"]').forEach(function(td){
+
+    // Guardar al salir de la celda
     td.addEventListener('blur', function(){
       const tr = td.closest('tr');
       const id = tr?.getAttribute('data-id');
@@ -1308,21 +1312,28 @@ if (htmlRows) {
       const isNum = (field==='precio_total' || field==='costoUnit' || field==='kg' || field==='cantidad');
       const val = isNum ? (+raw || 0) : td.textContent.trim();
       try {
-        // actualizar cache en memoria si existe
+        // actualizar cache local
+        let rowRef = null;
         if (Array.isArray(cache.resumen)) {
-          const row = cache.resumen.find(x => String(x.id||x.oid||x.pedido||x.remito||'') === String(id));
-          if (row) {
-            row[field] = val;
-            if(field==='precio_total'){ const c=+(row.cantidad||row.cant||1)||1; row.pv = c? (val/c): (row.pv||0); row.precio=row.pv; }
-            if(field==='costoUnit') row.costo = val;
+          rowRef = cache.resumen.find(x => String(x.id||x.oid||x.pedido||x.remito||'') === String(id));
+          if (rowRef) {
+            rowRef[field] = val;
+            if(field==='precio_total'){ const c=+(rowRef.cantidad||rowRef.cant||1)||1; rowRef.pv = c? (val/c): (rowRef.pv||0); rowRef.precio=rowRef.pv; }
+            if(field==='costoUnit') rowRef.costo = val;
           }
         }
-        // si existe una función de persistencia, invocarla sin romper la UI
-        if (typeof upsertResumenSupabase === 'function') { try{ upsertResumenSupabase(row); }catch(_){} }
-        if (typeof saveResumenRow === 'function') {
-          saveResumenRow({ id, [field]: val });
-        }
+        // persistir en DB si está disponible (best-effort)
+        try { if (typeof upsertResumenSupabase === 'function' && rowRef) upsertResumenSupabase(rowRef); } catch(_) {}
+        try { if (typeof saveResumenRow === 'function') saveResumenRow({ id, [field]: val }); } catch(_) {}
       } catch(_) {}
+      // refrescar totales/KPIs inmediatamente
+      try { renderResumen(); } catch(_) {}
+    });
+
+    // Confirmar con Enter / cancelar con Escape
+    td.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); td.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); try{ document.execCommand('undo'); }catch(_){ } td.blur(); }
     });
   });
 })();
@@ -1371,7 +1382,8 @@ if (htmlRows) {
   $('pp-limpiar').onclick = ()=>{ ['pp-prov','pp-desde','pp-hasta'].forEach(i=>$(i).value=''); renderPendientes(); };
   $('pp-print').onclick = ()=>{
     const data=getPendientes(); if(!data.length) return toast('Sin datos');
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Pendientes</title><style>body{font-family:Arial;margin:28px;color:#111}h1{margin:0 0 6px;font-size:22px}.sub{color:#444;font-size:12px;margin-bottom:12px}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5;text-align:left}.right{text-align:right}@media print{@page{size:A4;margin:18mm}}</style></head><body>
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Pendientes</title><style>body{font-family:Arial;margin:28px;color:#111}h1{margin:0 0 6px;font-size:22px}.sub{color:#444;font-size:12px;margin-bottom:12px}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5;text-align:left}.right{text-align:right}@media print{@page{size:A4;margin:18mm}}td.editable { white-space: nowrap; }
+</style></head><body>
     <h1>Pendientes de compra – Tu PyME</h1><div class="sub">Generado ${new Date().toLocaleString()}</div>
     <table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Código</th><th>Descripción</th><th>Pedida</th><th>Recibido</th><th>Pendiente</th><th>Unidad</th><th>Precio</th><th>Subtotal</th><th>Bulto</th><th>Calidad</th><th>Envase</th><th>Kg</th><th>Respa</th></tr></thead><tbody>${
       data.map(p=>`<tr><td>${p.fecha}</td><td>${p.prov||''}</td><td>${p.codigo}</td><td>${p.descripcion||''}</td><td class="right">${p.cant}</td><td class="right">${p.recibido??''}</td><td class="right">${fmt2(Math.max(0,(+p.cant||0)-(+p.recibido||0)))}</td><td>${p.unidad||''}</td><td class="right">${fmt2(+p.precio||0)}</td><td class="right">${fmt2((+p.precio||0)*(+p.cant||0))}</td><td class="right">${p.bulto!=null?fmt2(p.bulto):''}</td><td>${escapeHtml(p.calidad||'')}</td><td>${escapeHtml(p.envase||'')}</td><td class="right">${p.kg!=null?fmt2(p.kg):''}</td><td>${escapeHtml(p.respa||'')}</td></tr>`).join('')
@@ -1470,4 +1482,5 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
   </script>
 </body>
 </html>
+
 
