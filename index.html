@@ -60,18 +60,15 @@ input.money{width:110px; text-align:right}
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js">
 </script>
 <script>
+window.esc = function(s){ return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); };
+
 // Trae datos básicos desde Supabase en caso de que el cache esté vacío (opcional)
 // Carga garantizada de 'produccion' desde Supabase
 async function loadProduccionFromSupabase(){
   try{
     if(typeof supabase === 'undefined') return;
-    const { data, error } = await supabase
-      .from('produccion')
-      .select('id, org_id, fecha, cliente, codigo_prod, prod_nombre, cant, unidad, envase, estado, obs, bulto, calidad, kg, respa')
-      .order('fecha', { ascending: true })
-      .limit(5000);
-    if(!error && Array.isArray(data)){
-      cache.produccion = data;
+    let data=null,error=null; try{ const resp = await supabase.from('produccion').select('id, org_id, fecha, cliente, codigo_prod, prod_nombre, cant, unidad, envase, estado, obs, bulto, calidad, kg, respa').order('fecha', { ascending: true }).limit(5000); data=resp.data; error=resp.error; }catch(e){ error=e; }
+    if(!error && Array.isArray(data)){ cache.produccion = data;
       // construir resumen derivado si no existe
       if(!(cache.resumen && cache.resumen.length)){
         cache.resumen = buildResumenFromProduccion_STRICT();
@@ -83,6 +80,7 @@ async function loadProduccionFromSupabase(){
 }
 
 async function ensureDataLoaded(){
+  try{ const { data:session } = (typeof supabase!=='undefined' && supabase.auth) ? await supabase.auth.getSession() : {data:null}; if(!session || !session.session){ return; } }catch(_){ return; }
   try{ await loadProduccionFromSupabase(); }catch(_){}
 
   try{
@@ -1197,21 +1195,21 @@ const htmlRows = rows.map(function(r){
 
   return `<tr data-id="${id || (r.id || "")}">
     <td>${fecha}</td>
-    <td>${esc(cliente)}</td>
-    <td>${esc(producto)}</td>
+    <td>${safeEsc(cliente)}</td>
+    <td>${safeEsc(producto)}</td>
     <td class="num">${fmt2(cant)}</td>
-    <td>${esc(unidad)}</td>
-    <td>${esc(envase)}</td>
+    <td>${safeEsc(unidad)}</td>
+    <td>${safeEsc(envase)}</td>
     <td class="num">${fmt2(pvTotal)}</td>
     <td class="num">${fmt2(costoUnit)}</td>
     <td class="num">${fmt2(costoTotal)}</td>
     <td class="num">${fmt2(margen)}</td>
     <td class="num">${fmt2(pct)}</td>
-    <td class="editable" contenteditable="true" data-field="bulto">${esc(bulto)}</td>
-    <td class="editable" contenteditable="true" data-field="calidad">${esc(calidad)}</td>
-    <td class="editable" contenteditable="true" data-field="kg">${esc(kg)}</td>
-    <td class="editable" contenteditable="true" data-field="respa">${esc(respa)}</td>
-    <td class="editable" contenteditable="true" data-field="obs">${esc(obs)}</td>
+    <td class="editable" contenteditable="true" data-field="bulto">${safeEsc(bulto)}</td>
+    <td class="editable" contenteditable="true" data-field="calidad">${safeEsc(calidad)}</td>
+    <td class="editable" contenteditable="true" data-field="kg">${safeEsc(kg)}</td>
+    <td class="editable" contenteditable="true" data-field="respa">${safeEsc(respa)}</td>
+    <td class="editable" contenteditable="true" data-field="obs">${safeEsc(obs)}</td>
   </tr>`;
 }).join('');
 
@@ -1388,4 +1386,5 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
   </script>
 </body>
 </html>
+
 
