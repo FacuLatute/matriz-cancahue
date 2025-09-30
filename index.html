@@ -378,7 +378,7 @@ document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderRe
         <div class="right" style="align-items:end"><button class="primary" id="btn-print">Imprimir Remito</button>
 <button id="btn-resumen-export" class="ok">Exportar Excel</button></div>
       </div>
-      <table id="tbl-resumen" class="tbl-resumen"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Costo Unit</th><th>PV Total</th><th>Costo Total</th><th>Margen</th><th>%</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead><tbody></tbody></table>
+      <table id="tbl-resumen" class="tbl-resumen"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Costo Unit</th><th>PV Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead><tbody></tbody></table>
       <div class="totalbar">Total filtrado: $ <span id="res-total">0.00</span></div>
     </section>
 
@@ -1029,6 +1029,34 @@ await supabase.from('produccion').delete().eq('id',id);
   }
 
   /* ===== Resumen / Remito ===== */
+
+// === Costos: traer costo desde Compras (último precio de pedido entregado) ===
+function buildLastCostMap(){
+  const map = {};
+  try{
+    const rows = Array.isArray(cache.pedidos) ? cache.pedidos.slice() : [];
+    rows.sort((a,b)=> String(a.fecha||a.created_at||'').localeCompare(String(b.fecha||b.created_at||'')));
+    for(const r of rows){
+      if(r && r.codigo){
+        const st = String(r.estado||'').toLowerCase();
+        if(st.includes('entregado') || st.includes('cerrado') || !st){ // preferimos entregados
+          map[String(r.codigo).toLowerCase()] = Number(r.precio||0) || 0;
+        }
+      }
+    }
+  }catch(_){}
+  return map;
+}
+function getLastCostFor(codigo){
+  if(!codigo) return 0;
+  const code = String(codigo).toLowerCase();
+  if(!getLastCostFor._cache || !getLastCostFor._ver || getLastCostFor._ver !== (cache.pedidos && cache.pedidos.length)){
+    getLastCostFor._map = buildLastCostMap();
+    getLastCostFor._ver = cache.pedidos ? cache.pedidos.length : 0;
+  }
+  return Number(getLastCostFor._map[code] || 0);
+}
+
   
 $('btn-print').onclick = async ()=>{
   if(!can('resumen_print')) return toast('Sin permiso');
@@ -1110,11 +1138,11 @@ $('btn-print').onclick = async ()=>{
     </div>
     <table>
       <thead>
-        <tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>PV Total</th><th>Costo Total</th><th>Margen</th><th>%</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr>
+        <tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>PV Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr>
       </thead>
       <tbody>${tbody}</tbody>
     </table>
-    <div class="total">Venta: $ ${fmt(totalPV)} &nbsp;|&nbsp; Costo: $ ${fmt(totalCosto)} &nbsp;|&nbsp; Margen: $ ${fmt(totalMargen)} (${fmt(pctG)}%)</div>
+    <div class="total">Venta: $ ${fmt(totalPV)}</div>
     <scr${''}ipt>window.onload=function(){window.print();setTimeout(()=>window.close(),400);}</scr${''}ipt>
   </body></html>`;
 
@@ -1134,26 +1162,23 @@ $('btn-print').onclick = async ()=>{
   $('f-cli').addEventListener('input',()=>{ renderResumen(); });
   ['f-desde','f-hasta'].forEach(id=>$(id).addEventListener('input',()=>{ renderResumen(); }));
 
-  function setResumenField(id, field){ 
+  function setResumenField(id, field){
   return async (val) => {
-    debounceSave(async () => {
-      const payload = {};
-      if(field === 'precio_total'){
-        payload[field] = (val==='' ? null : Number(val)||0);
-      } else {
-        payload[field] = val;
-      }
-      const { error } = await supabase.from('resumen').update(payload).eq('id', id);
-      if(error){ toast(error.message); return; }
-      await loadAll(); renderResumen();
-    }, `${id}:${field}`, 350);
+    const payload = {};
+    if (field === 'precio_total') {
+      payload['precio_total'] = (val === '' ? null : Number(val) || 0);
+    } else if (field === 'costoUnit') {
+      payload['costo'] = Number(val) || 0;
+      try { payload['costo_unit'] = Number(val) || 0; } catch(_) {}
+    } else {
+      payload[field] = val;
+    }
+    const { error } = await supabase.from('resumen').update(payload).eq('id', id);
+    if (error) { try{ toast(error.message); }catch(_){ } return; }
+    try { await loadAll(); } catch(_) {}
+    try { renderResumen(); } catch(_) {}
   };
 }
-
-
-
-
-
 function isFinalOP(r){
   const s = String((r && r.estado) || '').toLowerCase().trim();
   return s.includes('final') || s.includes('termin');
@@ -1203,16 +1228,17 @@ async function createRemitoHeader({numero, fecha, total_venta, total_costo, tota
   }catch(e){ console.error('createRemitoHeader', e); return null; }
 }
 
+
 function renderResumen(){
   try{ ensureDataLoaded && ensureDataLoaded(); }catch(_){}
   const tbody = document.querySelector('#tbl-resumen tbody');
   if(!tbody) return;
   const fmt = (n)=> isFinite(n)? fmt2(n): '0.00';
 
-  // fuentes de datos: si existe cache.resumen úsalo; sino, produccion
+  // fuente de datos
   const src = (cache.resumen && cache.resumen.length) ? cache.resumen : (cache.prod || []);
 
-  // filtros (leer de barra interna y, si están vacíos, de la barra superior si existe)
+  // filtros (usa barra superior "res-f-*", si no están toma los del bloque interior)
   const fcliEl = document.getElementById('res-f-cli') || document.getElementById('r-cli') || document.querySelector('[data-res-cli]');
   const fdesdeEl = document.getElementById('res-f-desde') || document.getElementById('r-desde') || document.querySelector('[data-res-desde]');
   const fhastaEl = document.getElementById('res-f-hasta') || document.getElementById('r-hasta') || document.querySelector('[data-res-hasta]');
@@ -1220,124 +1246,128 @@ function renderResumen(){
   const fdesde = (fdesdeEl && fdesdeEl.value ? fdesdeEl.value : '').trim();
   const fhasta = (fhastaEl && fhastaEl.value ? fhastaEl.value : '').trim();
 
-  function inRange(d){
-    if(!d) return true;
-    const x = String(d).slice(0,10);
-    if(fdesde && x < fdesde) return false;
-    if(fhasta && x > fhasta) return false;
-    return true;
-  }
+  const isFinalOP = (r)=> {
+    const s = String((r && r.estado) || '').toLowerCase();
+    return s.includes('final') || s.includes('termin');
+  };
+  const safeDate10 = (d)=> (d ? String(d).slice(0,10) : '');
 
-  // adaptar campos si vienen de resumen (sin estado) o de produccion (con estado)
-  const rowsAll = src.filter(function(r){
-    if ('estado' in r) return isFinalOP(r);
-    return true;
-  });
-  // aplicar filtros de fecha y cliente
-  const rows = rowsAll.filter(function(r){
+  const rowsAll = src.filter(r => ('estado' in r ? isFinalOP(r) : true));
+  const rows = rowsAll.filter(r => {
     const cli = String(r.cliente || r.cli || '').toLowerCase();
-    const fecha = safeDate10(r.fecha || r.fentrega || r.fec || r.f || r.fechaEntrega);
+    const fecha = safeDate10(r.fecha || r.fec || r.f || r.fechaEntrega);
     if (fcli && !cli.includes(fcli)) return false;
     if (fdesde && fecha && fecha < fdesde) return false;
     if (fhasta && fecha && fecha > fhasta) return false;
     return true;
   });
 
-  // totales + render de filas completo (con celdas editables a la derecha)
-let totalPV = 0, totalCosto = 0, totalMargen = 0;
+  let totalPV = 0, totalCosto = 0, totalMargen = 0;
 
-function safeNum(x){ const n = +x; return isFinite(n) ? n : 0; }
+  function safeNum(x){ const n = +x; return isFinite(n) ? n : 0; }
 
-const htmlRows = rows.map(function(r){
-  const id = r.id || r.oid || r.pedido || r.remito || '';
-  const fecha = r.fecha || r.fec || r.f || r.fechaEntrega || '';
-  const cliente = r.cliente || r.cli || '';
-  const producto = r.prod_nombre || r.producto || r.prod || r.descripcion || r.desc || '';
-  const cant = safeNum(r.cantidad || r.cant || r.qty);
-  const unidad = r.unidad || r.uni || r.u || '';
-  const envase = r.envase || r.pack || r.pallet || '';
-  const pvUnit = safeNum(r.pv || r.precio || r.precioVenta);
-  const costoUnit = safeNum(r.costo || r.cost);
-  const pvTotal = +(r.precio_total || (pvUnit * (cant || 1)) || 0);
-  const costoTotal = costoUnit * (cant || 1);
-  const margen = pvTotal - costoTotal;
-  const pct = pvTotal>0 ? (margen/pvTotal*100) : 0;
+  const htmlRows = rows.map(r => {
+    const id = r.id || r.oid || r.pedido || r.remito || '';
+    const fecha = r.fecha || r.fec || r.f || r.fechaEntrega || '';
+    const cliente = r.cliente || r.cli || '';
+    const producto = r.prod_nombre || r.producto || r.prod || r.descripcion || r.desc || '';
+    const cant = safeNum(r.cantidad || r.cant || r.qty || 1) || 1;
+    const unidad = r.unidad || r.uni || r.u || '';
+    const envase = r.envase || r.pack || r.pallet || '';
 
-  totalPV += pvTotal;
-  totalCosto += costoTotal;
-  totalMargen += margen;
+    // código para buscar costo de compras
+    let codigo = r.codigo_prod || r.codigo || '';
+    if(!codigo){
+      try{
+        const desc = String(producto||'').toLowerCase();
+        const found = (cache.products||[]).find(p => String(p.descripcion||'').toLowerCase() === desc);
+        if(found) codigo = found.codigo;
+      }catch(_){}
+    }
 
-  // columnas editables (derecha)
-  const bulto = r.bulto ?? r.bultos ?? '';
-  const calidad = r.calidad ?? '';
-  const kg = r.kg ?? r.kilos ?? '';
-  const respa = r.respa ?? r.responsable ?? '';
-  const obs = r.obs ?? r.observaciones ?? '';
+    // costo: resumen -> fallback compras
+    let costoUnit = safeNum(r.costo || r.costoUnit || r.cost);
+    if(!(costoUnit>0) && codigo){
+      try{
+        const lc = getLastCostFor(codigo);
+        if(lc>0) costoUnit = lc;
+      }catch(_){}
+    }
 
-  return `<tr data-id="${id || (r.id || "")}">
-    <td>${fecha}</td>
-    <td>${safeEsc(cliente)}</td>
-    <td>${safeEsc(producto)}</td>
-    <td class="num">${fmt2(cant)}</td>
-    <td>${safeEsc(unidad)}</td>
-    <td>${safeEsc(envase)}</td>
-    <td class="editable num" contenteditable="true" data-field="costoUnit">${fmt2(costoUnit)}</td><td class="editable num" contenteditable="true" data-field="precio_total">${fmt2(pvTotal)}</td><td class="num">${fmt2(costoTotal)}</td>
-    <td class="num">${fmt2(margen)}</td>
-    <td class="num">${fmt2(pct)}</td>
-    <td class="editable" contenteditable="true" data-field="bulto">${safeEsc(bulto)}</td>
-    <td class="editable" contenteditable="true" data-field="calidad">${safeEsc(calidad)}</td>
-    <td class="editable" contenteditable="true" data-field="kg">${safeEsc(kg)}</td>
-    <td class="editable" contenteditable="true" data-field="respa">${safeEsc(respa)}</td>
-    <td class="editable" contenteditable="true" data-field="obs">${safeEsc(obs)}</td>
-  </tr>`;
-}).join('');
+    const pvTotal = +(r.precio_total || 0);
+    const costoTotal = costoUnit * cant;
+    const margen = pvTotal - costoTotal;
+    const pct = pvTotal>0 ? (margen/pvTotal*100) : 0;
 
-if (htmlRows) {
-  tbody.innerHTML = htmlRows;
-} else {
-  tbody.innerHTML = '<tr><td colspan="16" class="muted">Sin órdenes finalizadas</td></tr>';
-}
+    totalPV += pvTotal;
+    totalCosto += costoTotal;
+    totalMargen += margen;
 
-// habilitar edición local de las celdas derechas
-(function attachResumenEditors(){
-  const table = tbody.closest('table') || document;
-  table.querySelectorAll('td.editable[contenteditable="true"]').forEach(function(td){
+    const bulto = r.bulto ?? r.bultos ?? '';
+    const calidad = r.calidad ?? '';
+    const kg = r.kg ?? r.kilos ?? '';
+    const respa = r.respa ?? r.responsable ?? '';
+    const obs = r.obs ?? r.observaciones ?? '';
 
-    // Guardar al salir de la celda
-    td.addEventListener('blur', function(){
-      const tr = td.closest('tr');
-      const id = tr?.getAttribute('data-id');
-      const field = td.getAttribute('data-field');
-      const raw = td.textContent.trim().replace(/\./g,'').replace(',', '.');
-      const isNum = (field==='precio_total' || field==='costoUnit' || field==='kg' || field==='cantidad');
-      const val = isNum ? (+raw || 0) : td.textContent.trim();
-      try {
-        // actualizar cache local
-        let rowRef = null;
-        if (Array.isArray(cache.resumen)) {
-          rowRef = cache.resumen.find(x => String(x.id||x.oid||x.pedido||x.remito||'') === String(id));
-          if (rowRef) {
-            rowRef[field] = val;
-            if(field==='precio_total'){ const c=+(rowRef.cantidad||rowRef.cant||1)||1; rowRef.pv = c? (val/c): (rowRef.pv||0); rowRef.precio=rowRef.pv; }
-            if(field==='costoUnit') rowRef.costo = val;
+    return `<tr data-id="${id || (r.id || "")}">
+      <td>${fecha}</td>
+      <td>${safeEsc(cliente)}</td>
+      <td>${safeEsc(producto)}</td>
+      <td class="num">${fmt2(cant)}</td>
+      <td>${safeEsc(unidad)}</td>
+      <td>${safeEsc(envase)}</td>
+      <td class="editable num" contenteditable="true" data-field="costoUnit">${fmt2(costoUnit)}</td>
+      <td class="editable num" contenteditable="true" data-field="precio_total">${fmt2(pvTotal)}</td>
+      <td class="num">${fmt2(costoTotal)}</td>
+      <td class="num">${fmt2(margen)}</td>
+      <td class="num">${fmt2(pct)}</td>
+      <td class="editable" contenteditable="true" data-field="bulto">${safeEsc(bulto)}</td>
+      <td class="editable" contenteditable="true" data-field="calidad">${safeEsc(calidad)}</td>
+      <td class="editable" contenteditable="true" data-field="kg">${safeEsc(kg)}</td>
+      <td class="editable" contenteditable="true" data-field="respa">${safeEsc(respa)}</td>
+      <td class="editable" contenteditable="true" data-field="obs">${safeEsc(obs)}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.innerHTML = htmlRows || '<tr><td colspan="16" class="muted">Sin órdenes finalizadas</td></tr>';
+
+  // Editores: blur para guardar, Enter/Escape para confirmar/cancelar y refresco inmediato
+  (function attachResumenEditors(){
+    const table = tbody.closest('table') || document;
+    table.querySelectorAll('td.editable[contenteditable="true"]').forEach(function(td){
+
+      td.addEventListener('blur', function(){
+        const tr = td.closest('tr');
+        const id = tr?.getAttribute('data-id');
+        const field = td.getAttribute('data-field');
+        const raw = td.textContent.trim().replace(/\./g,'').replace(',', '.');
+        const isNum = (field==='precio_total' || field==='costoUnit' || field==='kg' || field==='cantidad');
+        const val = isNum ? (+raw || 0) : td.textContent.trim();
+
+        try {
+          let rowRef = null;
+          if (Array.isArray(cache.resumen)) {
+            rowRef = cache.resumen.find(x => String(x.id||x.oid||x.pedido||x.remito||'') === String(id));
+            if (rowRef) {
+              rowRef[field] = val;
+              if(field==='precio_total'){ const c=+(rowRef.cantidad||rowRef.cant||1)||1; rowRef.pv = c? (val/c): (rowRef.pv||0); rowRef.precio=rowRef.pv; }
+              if(field==='costoUnit'){ rowRef.costo = val; rowRef.costoUnit = val; }
+            }
           }
-        }
-        // persistir en DB si está disponible (best-effort)
-        try { if (typeof upsertResumenSupabase === 'function' && rowRef) upsertResumenSupabase(rowRef); } catch(_) {}
-        try { if (typeof saveResumenRow === 'function') saveResumenRow({ id, [field]: val }); } catch(_) {}
-      } catch(_) {}
-      // refrescar totales/KPIs inmediatamente
-      try { renderResumen(); } catch(_) {}
-    });
+          try { if (typeof upsertResumenSupabase === 'function' && rowRef) upsertResumenSupabase(rowRef); } catch(_) {}
+          try { if (typeof saveResumenRow === 'function') saveResumenRow({ id, [field]: val }); } catch(_) {}
+        } catch(_) {}
+        try { renderResumen(); } catch(_) {}
+      });
 
-    // Confirmar con Enter / cancelar con Escape
-    td.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); td.blur(); }
-      else if (e.key === 'Escape') { e.preventDefault(); try{ document.execCommand('undo'); }catch(_){ } td.blur(); }
+      td.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); td.blur(); }
+        else if (e.key === 'Escape') { e.preventDefault(); try{ document.execCommand('undo'); }catch(_){ } td.blur(); }
+      });
     });
-  });
-})();
-// KPIs
+  })();
+
+  // KPIs
   const kpis = document.getElementById('resumen-kpis');
   if(kpis){
     const pctG = totalPV>0 ? (totalMargen/totalPV*100) : 0;
@@ -1347,8 +1377,11 @@ if (htmlRows) {
       + '<div class="kpi"><span>Margen</span><b>$ ' + fmt(totalMargen) + '</b> <span>' + fmt2(pctG) + '%</span></div>';
     kpis.innerHTML = kpiHtml;
   }
-}
 
+  // Total filtrado
+  const totalEl = document.getElementById('res-total');
+  if(totalEl){ totalEl.textContent = fmt2(totalPV); }
+}
 /* ===== Pendientes ===== */
   function getPendientes(){
     const prov=($('pp-prov').value||'').toLowerCase(), d1=$('pp-desde').value||null, d2=$('pp-hasta').value||null;
@@ -1482,5 +1515,3 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
   </script>
 </body>
 </html>
-
-
