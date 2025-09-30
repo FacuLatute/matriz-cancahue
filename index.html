@@ -173,7 +173,25 @@ setTimeout(()=>{
 document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderResumen() });
 </script>
 </head>
-<body>
+\1
+<script>
+// Bootstrap utils BEFORE everything else
+(function(){
+  if (!window.esc) {
+    window.esc = function(s){
+      try{
+        return String(s ?? '').replace(/[&<>"']/g, function(m){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]);});
+      }catch(_){ return String(s ?? ''); }
+    };
+  }
+  if (!window.safeEsc) {
+    window.safeEsc = function(s){
+      try{ return window.esc ? window.esc(s) : String(s ?? ''); }catch(_){ return String(s ?? ''); }
+    };
+  }
+})();
+</script>
+
   <header id="appHeader" style="display:none">
     <h1>Sistema PyME – Frutas & Verduras</h1>
     <div class="sub">Sesión: <span id="whoami"></span></div>
@@ -1386,5 +1404,4 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
   </script>
 </body>
 </html>
-
 
