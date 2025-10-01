@@ -1266,6 +1266,7 @@ function renderResumen(){
 
   function safeNum(x){ const n = +x; return isFinite(n) ? n : 0; }
 
+  
   const htmlRows = rows.map(r => {
     const id = r.id || r.oid || r.pedido || r.remito || '';
     const fecha = r.fecha || r.fec || r.f || r.fechaEntrega || '';
@@ -1275,27 +1276,12 @@ function renderResumen(){
     const unidad = r.unidad || r.uni || r.u || '';
     const envase = r.envase || r.pack || r.pallet || '';
 
-    // código para buscar costo de compras
-    let codigo = r.codigo_prod || r.codigo || '';
-    if(!codigo){
-      try{
-        const desc = String(producto||'').toLowerCase();
-        const found = (cache.products||[]).find(p => String(p.descripcion||'').toLowerCase() === desc);
-        if(found) codigo = found.codigo;
-      }catch(_){}
-    }
-
-    // costo: resumen -> fallback compras
     let costoUnit = safeNum(r.costo || r.costoUnit || r.cost);
-
     const pvTotal = +(r.precio_total || 0);
-    const costoTotal = costoUnit * cant;
-    const margen = pvTotal - costoTotal;
-    const pct = pvTotal>0 ? (margen/pvTotal*100) : 0;
 
     totalPV += pvTotal;
-    totalCosto += costoTotal;
-    totalMargen += margen;
+    totalCosto += (costoUnit * cant);
+    totalMargen += (pvTotal - (costoUnit * cant));
 
     const bulto = (r.bulto ?? '');
     const calidad = (r.calidad ?? '');
@@ -1310,54 +1296,43 @@ function renderResumen(){
       <td class="num">${fmt2(cant)}</td>
       <td>${safeEsc(unidad)}</td>
       <td>${safeEsc(envase)}</td>
-      <td class="editable num" contenteditable="true" data-field="costoUnit">${fmt2(costoUnit)}</td>
-      <td class="editable num" contenteditable="true" data-field="precio_total">${fmt2(pvTotal)}</td>
-      <td class="num">${fmt2(costoTotal)}</td>
-      <td class="num">${fmt2(margen)}</td>
-      <td class="num">${fmt2(pct)}</td>
-      <td class="editable" contenteditable="true" data-field="bulto">${safeEsc(bulto)}</td>
-      <td class="editable" contenteditable="true" data-field="calidad">${safeEsc(calidad)}</td>
-      <td class="editable" contenteditable="true" data-field="kg">${safeEsc(kg)}</td>
-      <td class="editable" contenteditable="true" data-field="respa">${safeEsc(respa)}</td>
-      <td class="editable" contenteditable="true" data-field="obs">${safeEsc(obs)}</td>
+      <td><input type="number" step="0.01" class="money" data-field="costoUnit" value="${fmt2(costoUnit)}"></td>
+      <td><input type="number" step="0.01" class="money" data-field="precio_total" value="${fmt2(pvTotal)}"></td>
+      <td><input type="number" step="0.01" class="money" data-field="bulto" value="${bulto !== '' ? fmt2(bulto) : ''}"></td>
+      <td><input type="text" class="money" data-field="calidad" value="${safeEsc(calidad)}"></td>
+      <td><input type="number" step="0.01" class="money" data-field="kg" value="${kg !== '' ? fmt2(kg) : ''}"></td>
+      <td><input type="text" class="money" data-field="respa" value="${safeEsc(respa)}"></td>
+      <td><input type="text" class="money" data-field="obs" value="${safeEsc(obs)}"></td>
     </tr>`;
   }).join('');
 
   tbody.innerHTML = htmlRows || '<tr><td colspan="16" class="muted">Sin órdenes finalizadas</td></tr>';
 
-  // Editores: blur para guardar, Enter/Escape para confirmar/cancelar y refresco inmediato
-  (function attachResumenEditors(){
-    const table = tbody.closest('table') || document;
-    table.querySelectorAll('td.editable[contenteditable="true"]').forEach(function(td){
-
-      td.addEventListener('blur', function(){
-        const tr = td.closest('tr');
+  // Guardado de inputs (blur y Enter)
+  (function attachResumenInputs(){
+    tbody.querySelectorAll('input[data-field]').forEach(function(inp){
+      const saver = function(){
+        const tr = inp.closest('tr');
         const id = tr?.getAttribute('data-id');
-        const field = td.getAttribute('data-field');
-        const raw = td.textContent.trim().replace(/\./g,'').replace(',', '.');
-        const isNum = (field==='precio_total' || field==='costoUnit' || field==='kg' || field==='cantidad');
-        const val = isNum ? (+raw || 0) : td.textContent.trim();
+        const field = inp.getAttribute('data-field');
+        let valRaw = inp.value.trim().replace('.', '').replace(',', '.');
+        let val = (['costoUnit','precio_total','kg','bulto'].includes(field)) ? (+valRaw || 0) : inp.value.trim();
 
-        try {
-          let rowRef = null;
-          if (Array.isArray(cache.resumen)) {
-            rowRef = cache.resumen.find(x => String(x.id||x.oid||x.pedido||x.remito||'') === String(id));
-            if (rowRef) {
-              rowRef[field] = val;
-              if(field==='precio_total'){ const c=+(rowRef.cantidad||rowRef.cant||1)||1; rowRef.pv = c? (val/c): (rowRef.pv||0); rowRef.precio=rowRef.pv; }
-              if(field==='costoUnit'){ rowRef.costo = val; rowRef.costoUnit = val; }
-            }
+        // Actualizar cache
+        let rowRef = null;
+        if (Array.isArray(cache.resumen)) {
+          rowRef = cache.resumen.find(x => String(x.id||x.oid||x.pedido||x.remito||'') === String(id));
+          if (rowRef) {
+            rowRef[field] = val;
+            if(field==='precio_total'){ const c=+(rowRef.cantidad||rowRef.cant||1)||1; rowRef.pv = c? (val/c): (rowRef.pv||0); rowRef.precio=rowRef.pv; }
+            if(field==='costoUnit'){ rowRef.costo = val; rowRef.costoUnit = val; }
           }
-          try { if (typeof upsertResumenSupabase === 'function' && rowRef) upsertResumenSupabase(rowRef); } catch(_) {}
-          try { if (typeof saveResumenRow === 'function') saveResumenRow({ id, [field]: val }); } catch(_) {}
-        } catch(_) {}
+        }
+        try { if (typeof upsertResumenSupabase === 'function' && rowRef) upsertResumenSupabase(rowRef); } catch(_) {}
         try { renderResumen(); } catch(_) {}
-      });
-
-      td.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); td.blur(); }
-        else if (e.key === 'Escape') { e.preventDefault(); try{ document.execCommand('undo'); }catch(_){ } td.blur(); }
-      });
+      };
+      inp.addEventListener('blur', saver);
+      inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); saver(); } });
     });
   })();
 
@@ -1509,3 +1484,4 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
   </script>
 </body>
 </html>
+
