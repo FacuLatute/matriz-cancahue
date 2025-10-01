@@ -477,9 +477,11 @@ document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderRe
         <div><label>Hasta</label><input type="date" id="f-hasta" /></div>
         <div class="right" style="align-items:end"><button class="ghost" id="f-limpiar">Limpiar</button></div>
         <div class="right" style="align-items:end"><button class="primary" id="btn-print">Imprimir Remito</button>
-<button id="btn-resumen-export" class="ok">Exportar Excel</button></div>
+<button id="btn-resumen-export" class="ok">Exportar Excel</button>
+<button class="ghost" id="btn-resumen-saveall">Guardar cambios</button>
+<button class="ghost" id="btn-resumen-audit">Ver auditoría</button></div>
       </div>
-      <table id="tbl-resumen" class="tbl-resumen"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Costo Unit</th><th>PV Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead><tbody></tbody></table>
+      <table id="tbl-resumen" class="tbl-resumen"><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>Costo Unit</th><th>PV Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th><th>Acciones</th></tr></thead><tbody></tbody></table>
       <div class="totalbar">Total filtrado: $ <span id="res-total">0.00</span></div>
     </section>
 
@@ -1491,20 +1493,21 @@ function renderResumen(){
     const respa = r.respa ?? r.responsable ?? '';
     const obs = r.obs ?? r.observaciones ?? '';
 
-    return `<tr data-id="${id || (r.id || "")}">
+    return `<tr data-id="${id || (r.id || "")}" data-idop="${r.id_op||''}">
       <td>${fecha}</td>
       <td>${safeEsc(cliente)}</td>
       <td>${safeEsc(producto)}</td>
       <td class="num">${fmt2(cant)}</td>
       <td>${safeEsc(unidad)}</td>
       <td>${safeEsc(envase)}</td>
-      <td><input type="number" step="0.01" class="money" data-field="costoUnit" value="${fmt2(costoUnit)}"></td>
-      <td><input type="number" step="0.01" class="money" data-field="precio_total" value="${fmt2(pvTotal)}"></td>
-      <td><input type="number" step="0.01" class="money" data-field="bulto" value="${bulto !== '' ? fmt2(bulto) : ''}"></td>
+      <td><input type="number" step="0.01" min="0" class="money" data-field="costoUnit" value="${fmt2(Math.max(0,costoUnit))}"></td>
+      <td><input type="number" step="0.01" min="0" class="money" data-field="precio_total" value="${fmt2(Math.max(0,pvTotal))}"></td>
+      <td><input type="number" step="0.01" min="0" class="money" data-field="bulto" value="${bulto !== '' ? fmt2(Math.max(0,bulto)) : ''}"></td>
       <td><input type="text" class="money" data-field="calidad" value="${safeEsc(calidad)}"></td>
-      <td><input type="number" step="0.01" class="money" data-field="kg" value="${kg !== '' ? fmt2(kg) : ''}"></td>
+      <td><input type="number" step="0.01" min="0" class="money" data-field="kg" value="${kg !== '' ? fmt2(Math.max(0,kg)) : ''}"></td>
       <td><input type="text" class="money" data-field="respa" value="${safeEsc(respa)}"></td>
       <td><input type="text" class="money" data-field="obs" value="${safeEsc(obs)}"></td>
+      <td class="right"><button class="ghost" data-action="del">Eliminar</button></td>
     </tr>`;
   }).join('');
 
@@ -1512,25 +1515,44 @@ function renderResumen(){
 
   // Guardado de inputs (blur y Enter)
   (function attachResumenInputs(){
+    // botones eliminar
+    tbody.querySelectorAll('button[data-action="del"]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        const tr = btn.closest('tr');
+        const id = tr?.getAttribute('data-id');
+        const idop = tr?.getAttribute('data-idop');
+        if(id) delResumenRow(id, idop)();
+      });
+    });
+    // inputs
     tbody.querySelectorAll('input[data-field]').forEach(function(inp){
-      const saver = function(){
+      const saver = async function(){
         const tr = inp.closest('tr');
         const id = tr?.getAttribute('data-id');
         const field = inp.getAttribute('data-field');
-        let valRaw = inp.value.trim().replace('.', '').replace(',', '.');
-        let val = (['costoUnit','precio_total','kg','bulto'].includes(field)) ? (+valRaw || 0) : inp.value.trim();
+        const raw = inp.value;
+        let val = (['costoUnit','precio_total','kg','bulto'].includes(field)) ? clamp0(parseAR(raw)) : inp.value.trim();
 
-        // Actualizar cache
-        let rowRef = null;
+        // Validación visual
+        if(['costoUnit','precio_total','kg','bulto'].includes(field)){
+          if(val<0 || !isFinite(val)){ inp.style.borderColor = '#ef4444'; return; }
+          else { inp.style.borderColor = '#2b3a5a'; }
+        }
+
+        // Auditar cambios
+        let rowRef = null; let before = null;
         if (Array.isArray(cache.resumen)) {
           rowRef = cache.resumen.find(x => String(x.id||x.oid||x.pedido||x.remito||'') === String(id));
           if (rowRef) {
+            before = rowRef[field];
             rowRef[field] = val;
             if(field==='precio_total'){ const c=+(rowRef.cantidad||rowRef.cant||1)||1; rowRef.pv = c? (val/c): (rowRef.pv||0); rowRef.precio=rowRef.pv; }
             if(field==='costoUnit'){ rowRef.costo = val; rowRef.costoUnit = val; }
           }
         }
-        try { if (typeof upsertResumenSupabase === 'function' && rowRef) upsertResumenSupabase(rowRef); } catch(_) {}
+
+        try { if (typeof upsertResumenSupabase === 'function' && rowRef) await upsertResumenSupabase(rowRef); } catch(_) {}
+        try { await logAudit('update','resumen', id, { field, before, after: val }); } catch(_){}
         try { renderResumen(); } catch(_) {}
       };
       inp.addEventListener('blur', saver);
@@ -1553,6 +1575,74 @@ function renderResumen(){
   const totalEl = document.getElementById('res-total');
   if(totalEl){ totalEl.textContent = fmt2(totalPV); }
 }
+
+// === Helpers: formato AR y validación ===
+function fmtAR(n){ try{ return new Intl.NumberFormat('es-AR',{minimumFractionDigits:2, maximumFractionDigits:2}).format(+n||0); }catch(_){ return fmt2(+n||0); } }
+function parseAR(s){
+  if(s==null) return 0;
+  let t = String(s).trim();
+  // remove thousands separators . and replace comma with dot
+  t = t.replace(/\./g,'').replace(',','.');
+  const v = parseFloat(t);
+  return isFinite(v)? v : 0;
+}
+function clamp0(v){ v = +v; if(!isFinite(v)) v=0; return v<0?0:v; }
+
+async function logAudit(action, entity, row_id, details){
+  try{
+    const org = cache.org?.id || null;
+    const rec = { org_id: org, action, entity, row_id: String(row_id||''), details: JSON.stringify(details||{}), at: new Date().toISOString() };
+    await supabase.from('auditoria').insert(rec);
+  }catch(_){ /* si no existe tabla, ignorar */ }
+}
+
+// === Ver auditoría (si existe) ===
+document.getElementById('btn-resumen-audit')?.addEventListener('click', async ()=>{
+  try{
+    const org = cache.org?.id;
+    const { data, error } = await supabase.from('auditoria').select('*').eq('org_id', org).order('at',{ascending:false}).limit(200);
+    const rows = Array.isArray(data)? data: [];
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Auditoría</title>
+      <style>body{font-family:Arial;margin:18px;color:#111}table{width:100%;border-collapse:collapse;font-size:13px}
+      th,td{border:1px solid #ddd;padding:6px;text-align:left} th{background:#f5f5f5}</style></head><body>
+      <h2>Auditoría – últimas ${rows.length} operaciones</h2>
+      <table><thead><tr><th>Fecha</th><th>Acción</th><th>Entidad</th><th>Row ID</th><th>Detalles</th></tr></thead>
+      <tbody>${
+        rows.map(r=>`<tr><td>${r.at}</td><td>${r.action||''}</td><td>${r.entity||''}</td><td>${r.row_id||''}</td><td><pre style="white-space:pre-wrap;margin:0">${(r.details||'')}</pre></td></tr>`).join('')
+      }</tbody></table></body></html>`;
+    const w = window.open('','_blank'); w.document.open(); w.document.write(html); w.document.close();
+  }catch(e){ toast('No se pudo abrir auditoría'); }
+});
+
+// === Eliminar fila de Resumen (y opcionalmente OP asociada) ===
+function delResumenRow(id, id_op){
+  return async ()=>{
+    if(!confirm('¿Eliminar esta línea del Resumen?')) return;
+    try{
+      await supabase.from('resumen').delete().eq('id', id);
+      await logAudit('delete','resumen', id, { id_op });
+    }catch(e){ /* ignore */ }
+    try{
+      if(id_op && confirm('La fila viene de una Orden de Producción. ¿Eliminar también la OP y revertir consumos?')){
+        if(typeof delOP === 'function'){ await delOP(id_op)(); }
+      }
+    }catch(_){}
+    try{ await loadAll(); renderResumen(); }catch(_){}
+    toast('Eliminado');
+  };
+}
+
+// === Guardar todos los inputs visibles ===
+document.getElementById('btn-resumen-saveall')?.addEventListener('click', ()=>{
+  try{
+    const tbody = document.querySelector('#tbl-resumen tbody');
+    if(!tbody) return;
+    const inputs = tbody.querySelectorAll('input[data-field]');
+    inputs.forEach(inp=>{ inp.dispatchEvent(new Event('blur')); });
+    toast('Cambios guardados');
+  }catch(_){}
+});
+
 /* ===== Pendientes ===== */
   function getPendientes(){
   const prov=(document.getElementById('pp-prov')?.value||'').toLowerCase(), d1=document.getElementById('pp-desde')?.value||null, d2=document.getElementById('pp-hasta')?.value||null;
