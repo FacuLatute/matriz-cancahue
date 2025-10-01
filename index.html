@@ -158,95 +158,6 @@ td.editable { white-space: nowrap; }
   font-size: 15px;
 }
 
-
-/* === PRO UI v2 (compact & clean) === */
-.wrap{max-width:1200px}
-.tbl-resumen{border-collapse:separate;border-spacing:0 6px;margin-top:12px}
-.tbl-resumen thead th{
-  background:#0b1430;
-  border-bottom:1px solid #2a3a5e;
-  text-transform:uppercase;
-  letter-spacing:.35px;
-  font-size:11.5px;
-  color:#cbd5e1;
-  position:sticky;top:0;z-index:5;
-}
-.tbl-resumen tbody tr{
-  background:#0b1220;
-  box-shadow:0 2px 0 rgba(0,0,0,.12);
-  border-radius:10px;
-}
-.tbl-resumen tbody tr:hover{
-  background:#0f1a2e;
-  outline:1px solid #2b3a5a;
-}
-.tbl-resumen td:first-child,
-.tbl-resumen th:first-child{padding-left:14px}
-.tbl-resumen td:last-child,
-.tbl-resumen th:last-child{padding-right:14px}
-.tbl-resumen td,.tbl-resumen th{vertical-align:middle;padding:8px 10px}
-
-.tbl-resumen input{
-  height:26px;
-  padding:3px 8px;
-  border-radius:8px;
-  border:1px solid #27324d;
-  background:#0c1830;
-  font-size:12.5px;
-}
-.tbl-resumen input:focus{border-color:#7c6cf5;box-shadow:0 0 0 2px rgba(124,108,245,.22)}
-.tbl-resumen input[data-field="costoUnit"],
-.tbl-resumen input[data-field="precio_total"]{font-weight:600;background:#0e1c36}
-.tbl-resumen input[type="number"]{text-align:right;font-variant-numeric:tabular-nums}
-.tbl-resumen input[type="text"]{text-align:left}
-
-.tbl-resumen input[data-field="costoUnit"]{width:96px}
-.tbl-resumen input[data-field="precio_total"]{width:96px}
-.tbl-resumen input[data-field="bulto"],
-.tbl-resumen input[data-field="kg"]{width:76px}
-.tbl-resumen input[data-field="calidad"],
-.tbl-resumen input[data-field="respa"]{width:116px}
-.tbl-resumen input[data-field="obs"]{width:180px}
-
-#resumen-kpis{display:flex;gap:10px;flex-wrap:wrap}
-#resumen-kpis .kpi{
-  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
-  padding:.55rem .8rem
-}
-#resumen-kpis .kpi b{font-size:18px}
-
-.totalbar{
-  display:flex;justify-content:flex-end;align-items:center;
-  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
-  padding:10px 14px;margin:12px 0 4px;
-  position:sticky;bottom:10px;z-index:4;
-}
-.filters{grid-template-columns:1.3fr .7fr .7fr auto auto}
-@media (max-width:1000px){.filters{grid-template-columns:1fr 1fr}}
-
-
-/* === FIX9 PRO UI === */
-/* Different visuals for numeric vs text inputs */
-.tbl-resumen input.money{ background:#0c1830; }
-.tbl-resumen input.numfld{ background:#0e1c36; border-color:#2d3a5f; font-weight:600 }
-.tbl-resumen input.txtfld{ background:#0d152a; }
-.tbl-resumen input.calidad-pill{
-  text-transform: lowercase;
-  border-width:1px;
-}
-/* Calidad pill states */
-.tbl-resumen input.calidad-pill[data-level="buena"]{ background:#0f2a1f; border-color:#1f6f52; }
-.tbl-resumen input.calidad-pill[data-level="regular"]{ background:#2a2510; border-color:#8a6d1f; }
-.tbl-resumen input.calidad-pill[data-level="mala"]{ background:#2a1210; border-color:#8a2f2f; }
-.tbl-resumen input.calidad-pill::placeholder{ text-transform:none }
-
-/* Soften row card */
-.tbl-resumen tbody tr{
-  background:linear-gradient(180deg, rgba(15,24,46,.9), rgba(10,17,33,.9));
-  box-shadow:0 1px 0 rgba(0,0,0,.18);
-  border-radius:12px;
-}
-
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js">
 </script>
@@ -560,7 +471,6 @@ document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderRe
     <section class="card" id="tab-resumen" style="display:none">
       <h2>Órdenes finalizadas (para Remito)</h2>
 <div id="resumen-kpis" class="actions-right" style="margin-bottom:10px"></div>
-      <datalist id="calidad-list"><option value="buena"></option><option value="regular"></option><option value="mala"></option></datalist>
       <div class="filters">
         <div><label>Cliente (contiene)</label><input id="f-cli" /></div>
         <div><label>Desde</label><input type="date" id="f-desde" /></div>
@@ -581,7 +491,6 @@ document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderRe
         <div class="kpi"><div class="muted">Monto estimado</div><div class="big">$ <span id="pp-kpi-monto">0.00</span></div></div>
         <div class="kpi"><div class="muted">Proveedores activos</div><div class="big" id="pp-kpi-prov">0</div></div>
       </div>
-      <datalist id="calidad-list"><option value="buena"></option><option value="regular"></option><option value="mala"></option></datalist>
       <div class="filters">
         <div><label>Proveedor (contiene)</label><input id="pp-prov" /></div>
         <div><label>Desde</label><input type="date" id="pp-desde" /></div>
@@ -1419,95 +1328,6 @@ $('btn-print').onclick = async ()=>{
   font-size: 15px;
 }
 
-
-/* === PRO UI v2 (compact & clean) === */
-.wrap{max-width:1200px}
-.tbl-resumen{border-collapse:separate;border-spacing:0 6px;margin-top:12px}
-.tbl-resumen thead th{
-  background:#0b1430;
-  border-bottom:1px solid #2a3a5e;
-  text-transform:uppercase;
-  letter-spacing:.35px;
-  font-size:11.5px;
-  color:#cbd5e1;
-  position:sticky;top:0;z-index:5;
-}
-.tbl-resumen tbody tr{
-  background:#0b1220;
-  box-shadow:0 2px 0 rgba(0,0,0,.12);
-  border-radius:10px;
-}
-.tbl-resumen tbody tr:hover{
-  background:#0f1a2e;
-  outline:1px solid #2b3a5a;
-}
-.tbl-resumen td:first-child,
-.tbl-resumen th:first-child{padding-left:14px}
-.tbl-resumen td:last-child,
-.tbl-resumen th:last-child{padding-right:14px}
-.tbl-resumen td,.tbl-resumen th{vertical-align:middle;padding:8px 10px}
-
-.tbl-resumen input{
-  height:26px;
-  padding:3px 8px;
-  border-radius:8px;
-  border:1px solid #27324d;
-  background:#0c1830;
-  font-size:12.5px;
-}
-.tbl-resumen input:focus{border-color:#7c6cf5;box-shadow:0 0 0 2px rgba(124,108,245,.22)}
-.tbl-resumen input[data-field="costoUnit"],
-.tbl-resumen input[data-field="precio_total"]{font-weight:600;background:#0e1c36}
-.tbl-resumen input[type="number"]{text-align:right;font-variant-numeric:tabular-nums}
-.tbl-resumen input[type="text"]{text-align:left}
-
-.tbl-resumen input[data-field="costoUnit"]{width:96px}
-.tbl-resumen input[data-field="precio_total"]{width:96px}
-.tbl-resumen input[data-field="bulto"],
-.tbl-resumen input[data-field="kg"]{width:76px}
-.tbl-resumen input[data-field="calidad"],
-.tbl-resumen input[data-field="respa"]{width:116px}
-.tbl-resumen input[data-field="obs"]{width:180px}
-
-#resumen-kpis{display:flex;gap:10px;flex-wrap:wrap}
-#resumen-kpis .kpi{
-  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
-  padding:.55rem .8rem
-}
-#resumen-kpis .kpi b{font-size:18px}
-
-.totalbar{
-  display:flex;justify-content:flex-end;align-items:center;
-  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
-  padding:10px 14px;margin:12px 0 4px;
-  position:sticky;bottom:10px;z-index:4;
-}
-.filters{grid-template-columns:1.3fr .7fr .7fr auto auto}
-@media (max-width:1000px){.filters{grid-template-columns:1fr 1fr}}
-
-
-/* === FIX9 PRO UI === */
-/* Different visuals for numeric vs text inputs */
-.tbl-resumen input.money{ background:#0c1830; }
-.tbl-resumen input.numfld{ background:#0e1c36; border-color:#2d3a5f; font-weight:600 }
-.tbl-resumen input.txtfld{ background:#0d152a; }
-.tbl-resumen input.calidad-pill{
-  text-transform: lowercase;
-  border-width:1px;
-}
-/* Calidad pill states */
-.tbl-resumen input.calidad-pill[data-level="buena"]{ background:#0f2a1f; border-color:#1f6f52; }
-.tbl-resumen input.calidad-pill[data-level="regular"]{ background:#2a2510; border-color:#8a6d1f; }
-.tbl-resumen input.calidad-pill[data-level="mala"]{ background:#2a1210; border-color:#8a2f2f; }
-.tbl-resumen input.calidad-pill::placeholder{ text-transform:none }
-
-/* Soften row card */
-.tbl-resumen tbody tr{
-  background:linear-gradient(180deg, rgba(15,24,46,.9), rgba(10,17,33,.9));
-  box-shadow:0 1px 0 rgba(0,0,0,.18);
-  border-radius:12px;
-}
-
 </style></head><body>
     <h1>Remito ${remitoId?('#'+remitoId):''} – Tu PyME</h1>
     <div class="sub">Generado ${nowStr}</div>
@@ -1678,13 +1498,13 @@ function renderResumen(){
       <td class="num">${fmt2(cant)}</td>
       <td>${safeEsc(unidad)}</td>
       <td>${safeEsc(envase)}</td>
-      <td><input type="number" step="0.01" class="money" data-field="costoUnit" value="${fmt2(costoUnit)}" class="money numfld"></td>
-      <td><input type="number" step="0.01" class="money" data-field="precio_total" value="${fmt2(pvTotal)}" class="money numfld"></td>
-      <td><input type="number" step="0.01" class="money" data-field="bulto" value="${bulto !== '' ? fmt2(bulto) : ''}" class="money numfld"></td>
-      <td><input type="text" class="money" data-field="calidad" value="${safeEsc(calidad)}" list="calidad-list" class="money txtfld calidad-pill"></td>
-      <td><input type="number" step="0.01" class="money" data-field="kg" value="${kg !== '' ? fmt2(kg) : ''}" class="money numfld"></td>
-      <td><input type="text" class="money" data-field="respa" value="${safeEsc(respa)}" class="money txtfld"></td>
-      <td><input type="text" class="money" data-field="obs" value="${safeEsc(obs)}" class="money txtfld"></td>
+      <td><input type="number" step="0.01" class="money" data-field="costoUnit" value="${fmt2(costoUnit)}"></td>
+      <td><input type="number" step="0.01" class="money" data-field="precio_total" value="${fmt2(pvTotal)}"></td>
+      <td><input type="number" step="0.01" class="money" data-field="bulto" value="${bulto !== '' ? fmt2(bulto) : ''}"></td>
+      <td><input type="text" class="money" data-field="calidad" value="${safeEsc(calidad)}"></td>
+      <td><input type="number" step="0.01" class="money" data-field="kg" value="${kg !== '' ? fmt2(kg) : ''}"></td>
+      <td><input type="text" class="money" data-field="respa" value="${safeEsc(respa)}"></td>
+      <td><input type="text" class="money" data-field="obs" value="${safeEsc(obs)}"></td>
     </tr>`;
   }).join('');
 
@@ -1717,20 +1537,6 @@ function renderResumen(){
       inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); saver(); } });
     });
   })();
-
-
-(function wireCalidadPills(){
-  const setLevel = (inp)=>{
-    const v = String(inp.value||'').trim().toLowerCase();
-    inp.dataset.level = (v==='buena'||v==='regular'||v==='mala') ? v : '';
-  };
-  const scope = document.querySelector('#tbl-resumen tbody');
-  if(!scope) return;
-  scope.querySelectorAll('input[data-field="calidad"]').forEach(inp=>{
-    setLevel(inp);
-    ['input','change','blur'].forEach(ev=> inp.addEventListener(ev, ()=> setLevel(inp)));
-  });
-})();
 
   // KPIs
   const kpis = document.getElementById('resumen-kpis');
@@ -1880,95 +1686,6 @@ function renderResumen(){
   padding:10px 12px;
   border-radius:10px;
   font-size: 15px;
-}
-
-
-/* === PRO UI v2 (compact & clean) === */
-.wrap{max-width:1200px}
-.tbl-resumen{border-collapse:separate;border-spacing:0 6px;margin-top:12px}
-.tbl-resumen thead th{
-  background:#0b1430;
-  border-bottom:1px solid #2a3a5e;
-  text-transform:uppercase;
-  letter-spacing:.35px;
-  font-size:11.5px;
-  color:#cbd5e1;
-  position:sticky;top:0;z-index:5;
-}
-.tbl-resumen tbody tr{
-  background:#0b1220;
-  box-shadow:0 2px 0 rgba(0,0,0,.12);
-  border-radius:10px;
-}
-.tbl-resumen tbody tr:hover{
-  background:#0f1a2e;
-  outline:1px solid #2b3a5a;
-}
-.tbl-resumen td:first-child,
-.tbl-resumen th:first-child{padding-left:14px}
-.tbl-resumen td:last-child,
-.tbl-resumen th:last-child{padding-right:14px}
-.tbl-resumen td,.tbl-resumen th{vertical-align:middle;padding:8px 10px}
-
-.tbl-resumen input{
-  height:26px;
-  padding:3px 8px;
-  border-radius:8px;
-  border:1px solid #27324d;
-  background:#0c1830;
-  font-size:12.5px;
-}
-.tbl-resumen input:focus{border-color:#7c6cf5;box-shadow:0 0 0 2px rgba(124,108,245,.22)}
-.tbl-resumen input[data-field="costoUnit"],
-.tbl-resumen input[data-field="precio_total"]{font-weight:600;background:#0e1c36}
-.tbl-resumen input[type="number"]{text-align:right;font-variant-numeric:tabular-nums}
-.tbl-resumen input[type="text"]{text-align:left}
-
-.tbl-resumen input[data-field="costoUnit"]{width:96px}
-.tbl-resumen input[data-field="precio_total"]{width:96px}
-.tbl-resumen input[data-field="bulto"],
-.tbl-resumen input[data-field="kg"]{width:76px}
-.tbl-resumen input[data-field="calidad"],
-.tbl-resumen input[data-field="respa"]{width:116px}
-.tbl-resumen input[data-field="obs"]{width:180px}
-
-#resumen-kpis{display:flex;gap:10px;flex-wrap:wrap}
-#resumen-kpis .kpi{
-  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
-  padding:.55rem .8rem
-}
-#resumen-kpis .kpi b{font-size:18px}
-
-.totalbar{
-  display:flex;justify-content:flex-end;align-items:center;
-  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
-  padding:10px 14px;margin:12px 0 4px;
-  position:sticky;bottom:10px;z-index:4;
-}
-.filters{grid-template-columns:1.3fr .7fr .7fr auto auto}
-@media (max-width:1000px){.filters{grid-template-columns:1fr 1fr}}
-
-
-/* === FIX9 PRO UI === */
-/* Different visuals for numeric vs text inputs */
-.tbl-resumen input.money{ background:#0c1830; }
-.tbl-resumen input.numfld{ background:#0e1c36; border-color:#2d3a5f; font-weight:600 }
-.tbl-resumen input.txtfld{ background:#0d152a; }
-.tbl-resumen input.calidad-pill{
-  text-transform: lowercase;
-  border-width:1px;
-}
-/* Calidad pill states */
-.tbl-resumen input.calidad-pill[data-level="buena"]{ background:#0f2a1f; border-color:#1f6f52; }
-.tbl-resumen input.calidad-pill[data-level="regular"]{ background:#2a2510; border-color:#8a6d1f; }
-.tbl-resumen input.calidad-pill[data-level="mala"]{ background:#2a1210; border-color:#8a2f2f; }
-.tbl-resumen input.calidad-pill::placeholder{ text-transform:none }
-
-/* Soften row card */
-.tbl-resumen tbody tr{
-  background:linear-gradient(180deg, rgba(15,24,46,.9), rgba(10,17,33,.9));
-  box-shadow:0 1px 0 rgba(0,0,0,.18);
-  border-radius:12px;
 }
 
 </style></head><body>
