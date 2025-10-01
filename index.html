@@ -57,6 +57,38 @@
 input.money{width:110px; text-align:right}
 
 td.editable { white-space: nowrap; }
+
+/* === UI Polished: Resumen inputs neat === */
+.tbl-resumen td, .tbl-resumen th { vertical-align: middle; }
+.tbl-resumen input {
+  height: 34px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #2b3a5a;
+  background:#0b162d;
+  color:#e5e7eb;
+  outline: none;
+  font-size: 13px;
+}
+.tbl-resumen input:focus{
+  border-color:#8b5cf6;
+  box-shadow:0 0 0 2px #8b5cf633;
+}
+/* Numeric fields right-aligned */
+.tbl-resumen input[type="number"]{ text-align:right; }
+/* Text fields left-aligned */
+.tbl-resumen input[type="text"]{ text-align:left; }
+/* Column widths */
+.tbl-resumen input[data-field="costoUnit"]{ width:110px; }
+.tbl-resumen input[data-field="precio_total"]{ width:110px; }
+.tbl-resumen input[data-field="bulto"]{ width:90px; }
+.tbl-resumen input[data-field="kg"]{ width:90px; }
+.tbl-resumen input[data-field="calidad"]{ width:120px; }
+.tbl-resumen input[data-field="respa"]{ width:120px; }
+.tbl-resumen input[data-field="obs"]{ width:180px; }
+/* Header chips spacing */
+#resumen-kpis .kpi{ gap:.5rem; padding:.45rem .7rem; }
+
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js">
 </script>
@@ -1126,6 +1158,38 @@ $('btn-print').onclick = async ()=>{
     .total{margin-top:10px;display:flex;justify-content:flex-end;font-size:16px;font-weight:bold}
     @media print{@page{size:A4 portrait;margin:20mm}}
   td.editable { white-space: nowrap; }
+
+/* === UI Polished: Resumen inputs neat === */
+.tbl-resumen td, .tbl-resumen th { vertical-align: middle; }
+.tbl-resumen input {
+  height: 34px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #2b3a5a;
+  background:#0b162d;
+  color:#e5e7eb;
+  outline: none;
+  font-size: 13px;
+}
+.tbl-resumen input:focus{
+  border-color:#8b5cf6;
+  box-shadow:0 0 0 2px #8b5cf633;
+}
+/* Numeric fields right-aligned */
+.tbl-resumen input[type="number"]{ text-align:right; }
+/* Text fields left-aligned */
+.tbl-resumen input[type="text"]{ text-align:left; }
+/* Column widths */
+.tbl-resumen input[data-field="costoUnit"]{ width:110px; }
+.tbl-resumen input[data-field="precio_total"]{ width:110px; }
+.tbl-resumen input[data-field="bulto"]{ width:90px; }
+.tbl-resumen input[data-field="kg"]{ width:90px; }
+.tbl-resumen input[data-field="calidad"]{ width:120px; }
+.tbl-resumen input[data-field="respa"]{ width:120px; }
+.tbl-resumen input[data-field="obs"]{ width:180px; }
+/* Header chips spacing */
+#resumen-kpis .kpi{ gap:.5rem; padding:.45rem .7rem; }
+
 </style></head><body>
     <h1>Remito ${remitoId?('#'+remitoId):''} – Tu PyME</h1>
     <div class="sub">Generado ${nowStr}</div>
@@ -1385,6 +1449,38 @@ function renderResumen(){
   $('pp-print').onclick = ()=>{
     const data=getPendientes(); if(!data.length) return toast('Sin datos');
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Pendientes</title><style>body{font-family:Arial;margin:28px;color:#111}h1{margin:0 0 6px;font-size:22px}.sub{color:#444;font-size:12px;margin-bottom:12px}table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5;text-align:left}.right{text-align:right}@media print{@page{size:A4;margin:18mm}}td.editable { white-space: nowrap; }
+
+/* === UI Polished: Resumen inputs neat === */
+.tbl-resumen td, .tbl-resumen th { vertical-align: middle; }
+.tbl-resumen input {
+  height: 34px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #2b3a5a;
+  background:#0b162d;
+  color:#e5e7eb;
+  outline: none;
+  font-size: 13px;
+}
+.tbl-resumen input:focus{
+  border-color:#8b5cf6;
+  box-shadow:0 0 0 2px #8b5cf633;
+}
+/* Numeric fields right-aligned */
+.tbl-resumen input[type="number"]{ text-align:right; }
+/* Text fields left-aligned */
+.tbl-resumen input[type="text"]{ text-align:left; }
+/* Column widths */
+.tbl-resumen input[data-field="costoUnit"]{ width:110px; }
+.tbl-resumen input[data-field="precio_total"]{ width:110px; }
+.tbl-resumen input[data-field="bulto"]{ width:90px; }
+.tbl-resumen input[data-field="kg"]{ width:90px; }
+.tbl-resumen input[data-field="calidad"]{ width:120px; }
+.tbl-resumen input[data-field="respa"]{ width:120px; }
+.tbl-resumen input[data-field="obs"]{ width:180px; }
+/* Header chips spacing */
+#resumen-kpis .kpi{ gap:.5rem; padding:.45rem .7rem; }
+
 </style></head><body>
     <h1>Pendientes de compra – Tu PyME</h1><div class="sub">Generado ${new Date().toLocaleString()}</div>
     <table><thead><tr><th>Fecha</th><th>Proveedor</th><th>Código</th><th>Descripción</th><th>Pedida</th><th>Recibido</th><th>Pendiente</th><th>Unidad</th><th>Precio</th><th>Subtotal</th><th>Bulto</th><th>Calidad</th><th>Envase</th><th>Kg</th><th>Respa</th></tr></thead><tbody>${
