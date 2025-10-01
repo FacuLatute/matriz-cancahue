@@ -158,6 +158,72 @@ td.editable { white-space: nowrap; }
   font-size: 15px;
 }
 
+
+/* === PRO UI v2 (compact & clean) === */
+.wrap{max-width:1200px}
+.tbl-resumen{border-collapse:separate;border-spacing:0 6px;margin-top:12px}
+.tbl-resumen thead th{
+  background:#0b1430;
+  border-bottom:1px solid #2a3a5e;
+  text-transform:uppercase;
+  letter-spacing:.35px;
+  font-size:11.5px;
+  color:#cbd5e1;
+  position:sticky;top:0;z-index:5;
+}
+.tbl-resumen tbody tr{
+  background:#0b1220;
+  box-shadow:0 2px 0 rgba(0,0,0,.12);
+  border-radius:10px;
+}
+.tbl-resumen tbody tr:hover{
+  background:#0f1a2e;
+  outline:1px solid #2b3a5a;
+}
+.tbl-resumen td:first-child,
+.tbl-resumen th:first-child{padding-left:14px}
+.tbl-resumen td:last-child,
+.tbl-resumen th:last-child{padding-right:14px}
+.tbl-resumen td,.tbl-resumen th{vertical-align:middle;padding:8px 10px}
+
+.tbl-resumen input{
+  height:26px;
+  padding:3px 8px;
+  border-radius:8px;
+  border:1px solid #27324d;
+  background:#0c1830;
+  font-size:12.5px;
+}
+.tbl-resumen input:focus{border-color:#7c6cf5;box-shadow:0 0 0 2px rgba(124,108,245,.22)}
+.tbl-resumen input[data-field="costoUnit"],
+.tbl-resumen input[data-field="precio_total"]{font-weight:600;background:#0e1c36}
+.tbl-resumen input[type="number"]{text-align:right;font-variant-numeric:tabular-nums}
+.tbl-resumen input[type="text"]{text-align:left}
+
+.tbl-resumen input[data-field="costoUnit"]{width:96px}
+.tbl-resumen input[data-field="precio_total"]{width:96px}
+.tbl-resumen input[data-field="bulto"],
+.tbl-resumen input[data-field="kg"]{width:76px}
+.tbl-resumen input[data-field="calidad"],
+.tbl-resumen input[data-field="respa"]{width:116px}
+.tbl-resumen input[data-field="obs"]{width:180px}
+
+#resumen-kpis{display:flex;gap:10px;flex-wrap:wrap}
+#resumen-kpis .kpi{
+  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
+  padding:.55rem .8rem
+}
+#resumen-kpis .kpi b{font-size:18px}
+
+.totalbar{
+  display:flex;justify-content:flex-end;align-items:center;
+  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
+  padding:10px 14px;margin:12px 0 4px;
+  position:sticky;bottom:10px;z-index:4;
+}
+.filters{grid-template-columns:1.3fr .7fr .7fr auto auto}
+@media (max-width:1000px){.filters{grid-template-columns:1fr 1fr}}
+
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js">
 </script>
@@ -1328,6 +1394,72 @@ $('btn-print').onclick = async ()=>{
   font-size: 15px;
 }
 
+
+/* === PRO UI v2 (compact & clean) === */
+.wrap{max-width:1200px}
+.tbl-resumen{border-collapse:separate;border-spacing:0 6px;margin-top:12px}
+.tbl-resumen thead th{
+  background:#0b1430;
+  border-bottom:1px solid #2a3a5e;
+  text-transform:uppercase;
+  letter-spacing:.35px;
+  font-size:11.5px;
+  color:#cbd5e1;
+  position:sticky;top:0;z-index:5;
+}
+.tbl-resumen tbody tr{
+  background:#0b1220;
+  box-shadow:0 2px 0 rgba(0,0,0,.12);
+  border-radius:10px;
+}
+.tbl-resumen tbody tr:hover{
+  background:#0f1a2e;
+  outline:1px solid #2b3a5a;
+}
+.tbl-resumen td:first-child,
+.tbl-resumen th:first-child{padding-left:14px}
+.tbl-resumen td:last-child,
+.tbl-resumen th:last-child{padding-right:14px}
+.tbl-resumen td,.tbl-resumen th{vertical-align:middle;padding:8px 10px}
+
+.tbl-resumen input{
+  height:26px;
+  padding:3px 8px;
+  border-radius:8px;
+  border:1px solid #27324d;
+  background:#0c1830;
+  font-size:12.5px;
+}
+.tbl-resumen input:focus{border-color:#7c6cf5;box-shadow:0 0 0 2px rgba(124,108,245,.22)}
+.tbl-resumen input[data-field="costoUnit"],
+.tbl-resumen input[data-field="precio_total"]{font-weight:600;background:#0e1c36}
+.tbl-resumen input[type="number"]{text-align:right;font-variant-numeric:tabular-nums}
+.tbl-resumen input[type="text"]{text-align:left}
+
+.tbl-resumen input[data-field="costoUnit"]{width:96px}
+.tbl-resumen input[data-field="precio_total"]{width:96px}
+.tbl-resumen input[data-field="bulto"],
+.tbl-resumen input[data-field="kg"]{width:76px}
+.tbl-resumen input[data-field="calidad"],
+.tbl-resumen input[data-field="respa"]{width:116px}
+.tbl-resumen input[data-field="obs"]{width:180px}
+
+#resumen-kpis{display:flex;gap:10px;flex-wrap:wrap}
+#resumen-kpis .kpi{
+  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
+  padding:.55rem .8rem
+}
+#resumen-kpis .kpi b{font-size:18px}
+
+.totalbar{
+  display:flex;justify-content:flex-end;align-items:center;
+  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
+  padding:10px 14px;margin:12px 0 4px;
+  position:sticky;bottom:10px;z-index:4;
+}
+.filters{grid-template-columns:1.3fr .7fr .7fr auto auto}
+@media (max-width:1000px){.filters{grid-template-columns:1fr 1fr}}
+
 </style></head><body>
     <h1>Remito ${remitoId?('#'+remitoId):''} – Tu PyME</h1>
     <div class="sub">Generado ${nowStr}</div>
@@ -1687,6 +1819,72 @@ function renderResumen(){
   border-radius:10px;
   font-size: 15px;
 }
+
+
+/* === PRO UI v2 (compact & clean) === */
+.wrap{max-width:1200px}
+.tbl-resumen{border-collapse:separate;border-spacing:0 6px;margin-top:12px}
+.tbl-resumen thead th{
+  background:#0b1430;
+  border-bottom:1px solid #2a3a5e;
+  text-transform:uppercase;
+  letter-spacing:.35px;
+  font-size:11.5px;
+  color:#cbd5e1;
+  position:sticky;top:0;z-index:5;
+}
+.tbl-resumen tbody tr{
+  background:#0b1220;
+  box-shadow:0 2px 0 rgba(0,0,0,.12);
+  border-radius:10px;
+}
+.tbl-resumen tbody tr:hover{
+  background:#0f1a2e;
+  outline:1px solid #2b3a5a;
+}
+.tbl-resumen td:first-child,
+.tbl-resumen th:first-child{padding-left:14px}
+.tbl-resumen td:last-child,
+.tbl-resumen th:last-child{padding-right:14px}
+.tbl-resumen td,.tbl-resumen th{vertical-align:middle;padding:8px 10px}
+
+.tbl-resumen input{
+  height:26px;
+  padding:3px 8px;
+  border-radius:8px;
+  border:1px solid #27324d;
+  background:#0c1830;
+  font-size:12.5px;
+}
+.tbl-resumen input:focus{border-color:#7c6cf5;box-shadow:0 0 0 2px rgba(124,108,245,.22)}
+.tbl-resumen input[data-field="costoUnit"],
+.tbl-resumen input[data-field="precio_total"]{font-weight:600;background:#0e1c36}
+.tbl-resumen input[type="number"]{text-align:right;font-variant-numeric:tabular-nums}
+.tbl-resumen input[type="text"]{text-align:left}
+
+.tbl-resumen input[data-field="costoUnit"]{width:96px}
+.tbl-resumen input[data-field="precio_total"]{width:96px}
+.tbl-resumen input[data-field="bulto"],
+.tbl-resumen input[data-field="kg"]{width:76px}
+.tbl-resumen input[data-field="calidad"],
+.tbl-resumen input[data-field="respa"]{width:116px}
+.tbl-resumen input[data-field="obs"]{width:180px}
+
+#resumen-kpis{display:flex;gap:10px;flex-wrap:wrap}
+#resumen-kpis .kpi{
+  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
+  padding:.55rem .8rem
+}
+#resumen-kpis .kpi b{font-size:18px}
+
+.totalbar{
+  display:flex;justify-content:flex-end;align-items:center;
+  background:#0c1530;border:1px solid #2b3a5a;border-radius:12px;
+  padding:10px 14px;margin:12px 0 4px;
+  position:sticky;bottom:10px;z-index:4;
+}
+.filters{grid-template-columns:1.3fr .7fr .7fr auto auto}
+@media (max-width:1000px){.filters{grid-template-columns:1fr 1fr}}
 
 </style></head><body>
     <h1>Pendientes de compra – Tu PyME</h1><div class="sub">Generado ${new Date().toLocaleString()}</div>
