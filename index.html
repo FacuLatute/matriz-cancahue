@@ -158,68 +158,6 @@ td.editable { white-space: nowrap; }
   font-size: 15px;
 }
 
-
-/* === UI Profesional: Resumen (v2) === */
-.money { text-align: right; font-variant-numeric: tabular-nums; }
-
-.tbl-resumen thead th {
-  background: linear-gradient(90deg,#1e293b,#0f172a);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .5px;
-  color: #f1f5f9;
-  border-bottom: 2px solid #334155;
-}
-
-.tbl-resumen tbody tr {
-  background: #0b1220;
-  transition: background .2s ease;
-}
-.tbl-resumen tbody tr:nth-child(even){ background:#101a2f; }
-.tbl-resumen tbody tr:hover{ background:#1e293b; }
-
-.tbl-resumen input {
-  border-radius: 6px;
-  border: 1px solid #334155;
-  background: #0f172a;
-  padding: 5px 8px;
-  font-size: 13px;
-}
-.tbl-resumen input:focus {
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 2px rgba(56,189,248,.25);
-}
-
-#resumen-kpis { display:flex; gap:10px; flex-wrap:wrap; }
-#resumen-kpis .kpi {
-  background:#1e293b;
-  border:1px solid #334155;
-  border-radius:12px;
-  padding:10px 14px;
-  display:flex; flex-direction:column;
-  min-width:160px; text-align:center;
-}
-#resumen-kpis .kpi span { font-size:12px; opacity:.8; }
-#resumen-kpis .kpi b { font-size:22px; font-weight:700; }
-
-.totalbar {
-  margin-top:12px;
-  background:#1e293b;
-  border:1px solid #334155;
-  padding:12px 16px;
-  border-radius:12px;
-  font-size:16px;
-  font-weight:600;
-  display:flex; justify-content:flex-end;
-}
-
-/* Buttons */
-button.primary { background:#2563eb; }
-button.ok { background:#16a34a; }
-button.warn { background:#f97316; }
-button.ghost { background:#1f2937; }
-
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js">
 </script>
@@ -637,8 +575,6 @@ function debounceSave(fn, key, ms=300){
   const cache = { org:null, profile:null, perms:[], products:[], envases:[], stock:{}, pedidos:[], prod:[], resumen:[], hist:[], users:[] };
   const $ = id=>document.getElementById(id);
   const fmt2 = n => (isFinite(n)?Number(n).toFixed(2):'');
-const nfAR = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtARS = (n) => (new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 })).format(Number(n)||0);
   function toast(m){ const t=$('toast'); t.style.display='block'; t.textContent=m; setTimeout(()=>t.style.display='none',2000); }
   function escapeHtml(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   const can = p => cache.perms.includes(p);
@@ -1607,15 +1543,15 @@ function renderResumen(){
   if(kpis){
     const pctG = totalPV>0 ? (totalMargen/totalPV*100) : 0;
     const kpiHtml = ''
-      + '<div class="kpi"><span>Venta</span><b>' + fmtARS(totalPV) + '</b></div>'
-      + '<div class="kpi"><span>Costo</span><b>' + fmtARS(totalCosto) + '</b></div>'
-      + '<div class="kpi"><span>Margen</span><b>' + fmtARS(totalMargen) + '</b> <span>' + fmt2(pctG) + '%</span></div>';
+      + '<div class="kpi"><span>Venta</span><b>$ ' + fmt(totalPV) + '</b></div>'
+      + '<div class="kpi"><span>Costo</span><b>$ ' + fmt(totalCosto) + '</b></div>'
+      + '<div class="kpi"><span>Margen</span><b>$ ' + fmt(totalMargen) + '</b> <span>' + fmt2(pctG) + '%</span></div>';
     kpis.innerHTML = kpiHtml;
   }
 
   // Total filtrado
   const totalEl = document.getElementById('res-total');
-  if(totalEl){ totalEl.textContent = nfAR.format(totalPV); }
+  if(totalEl){ totalEl.textContent = fmt2(totalPV); }
 }
 /* ===== Pendientes ===== */
   function getPendientes(){
@@ -1851,4 +1787,3 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
   </script>
 </body>
 </html>
-
