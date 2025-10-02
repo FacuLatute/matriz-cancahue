@@ -259,74 +259,19 @@ setTimeout(()=>{
 
 // Eventos filtros resumen
 (function(){
-  if (window.__resumenWired) return; // evitar múltiples bindings
-  window.__resumenWired = true;
-
-  const SCHEDULE_MS = 250;
-  let timer = null;
-  let rafId = null;
-
-  const scheduleRender = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      // sincronizar una sola vez antes de renderizar
-      const pairs = [
-        ['res-f-cli', 'f-cli'],
-        ['res-f-desde', 'f-desde'],
-        ['res-f-hasta', 'f-hasta'],
-      ];
-      for (const [headId, innerId] of pairs) {
-        const head = document.getElementById(headId);
-        const inner = document.getElementById(innerId);
-        if (head && inner && inner.value !== head.value) inner.value = head.value;
-      }
-      if (typeof renderResumen === 'function') {
-        if (rafId) cancelAnimationFrame(rafId);
-        rafId = requestAnimationFrame(() => { renderResumen(); });
-      }
-    }, SCHEDULE_MS);
-  };
-
-  // Vincular inputs del encabezado con debounce
-  const bind = (id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('input', scheduleRender, { passive: true });
-    el.addEventListener('change', scheduleRender);
-  };
-  ['res-f-cli','res-f-desde','res-f-hasta'].forEach(bind);
-
-  // Botón Aplicar (render inmediato y único)
-  const btnApply = document.getElementById('res-f-aplicar');
-  if (btnApply) btnApply.onclick = () => {
-    if (timer) clearTimeout(timer);
-    timer = null;
-    // sync y render inmediato
-    ['res-f-cli','res-f-desde','res-f-hasta'].forEach((hid, i) => {
-      const iid = ['f-cli','f-desde','f-hasta'][i];
-      const h = document.getElementById(hid), inr = document.getElementById(iid);
-      if (h && inr && inr.value != h.value) inr.value = h.value;
-    });
-    if (typeof renderResumen === 'function') renderResumen();
-  };
-
-  // Botón Limpiar (borra ambos juegos y renderiza una sola vez)
-  const btnClear = document.getElementById('res-f-limpiar');
-  if (btnClear) btnClear.onclick = () => {
-    ['res-f-cli','res-f-desde','res-f-hasta','f-cli','f-desde','f-hasta']
-      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-    if (typeof renderResumen === 'function') renderResumen();
-  };
-
-  // Al cargar, si existen valores internos, replicar al encabezado una sola vez
-  window.addEventListener('DOMContentLoaded', () => {
-    ['res-f-cli','res-f-desde','res-f-hasta'].forEach((hid, i) => {
-      const iid = ['f-cli','f-desde','f-hasta'][i];
-      const h = document.getElementById(hid), inr = document.getElementById(iid);
-      if (h && inr && !h.value && inr.value) h.value = inr.value;
-    });
-  });
+  const a = document.getElementById('res-f-aplicar');
+  const l = document.getElementById('res-f-limpiar');
+  const c = document.getElementById('res-f-cli');
+  const d = document.getElementById('res-f-desde');
+  const h = document.getElementById('res-f-hasta');
+  if(a){ a.onclick = renderResumen; }
+  if(c){ c.addEventListener('keyup', e=>{ if(e.key==='Enter') renderResumen(); }); }
+  if(d){ d.onchange = renderResumen; }
+  if(h){ h.onchange = renderResumen; }
+  if(l){ l.onclick = ()=>{ if(c) c.value=''; if(d) d.value=''; if(h) h.value=''; renderResumen(); }; }
 })();
+
+
 document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderResumen() });
 </script>
 </head>
