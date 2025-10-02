@@ -1857,3 +1857,59 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
 </body>
 </html>
 
+
+<!-- robust, idempotent delegation + error safety -->
+<script>
+(function(){
+  if (window.__ALTUM_wiredDelegation) return;
+  window.__ALTUM_wiredDelegation = true;
+
+  // Helper: safely run async actions with UI lock/unlock
+  async function __runSafely(action, lockSelector) {
+    const btn = lockSelector ? document.querySelector(lockSelector) : null;
+    if (btn) btn.disabled = true;
+    document.body.classList.add('altum-busy');
+    try {
+      await action();
+    } catch (err) {
+      console.error('ALTUM error:', err);
+      alert('Ocurrió un error al ejecutar la acción. Revisá la consola (F12) para más detalles.');
+    } finally {
+      if (btn) btn.disabled = false;
+      document.body.classList.remove('altum-busy');
+    }
+  }
+
+  // Exponer helpers globales por si otros módulos los quieren usar
+  window.__ALTUM_runSafely = __runSafely;
+
+  // Delegado de impresión (una única vez y estable)
+  window.__ALTUM_onClick = function(e){
+    const printBtn = e.target.closest && e.target.closest('#btn-print');
+    if (printBtn) {
+      e.preventDefault();
+      if (typeof window.__onPrintRemito === 'function') {
+        __runSafely(() => window.__onPrintRemito(), '#btn-print');
+      }
+      return;
+    }
+    const exportBtn = e.target.closest && e.target.closest('#btn-export');
+    if (exportBtn) {
+      e.preventDefault();
+      if (typeof window.__onExportExcel === 'function') {
+        __runSafely(() => window.__onExportExcel(), '#btn-export');
+      }
+      return;
+    }
+  };
+
+  // Limpieza previa si quedó un handler viejo (por recargas parciales)
+  document.removeEventListener('click', window.__ALTUM_onClick);
+  document.addEventListener('click', window.__ALTUM_onClick, { passive: false });
+
+  // CSS mínimo para indicar estado ocupado (no bloquea, pero evita doble click)
+  const style = document.createElement('style');
+  style.textContent = '.altum-busy { cursor: progress !important; }';
+  document.head.appendChild(style);
+})();
+</script>
