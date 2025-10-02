@@ -264,14 +264,40 @@ setTimeout(()=>{
   const c = document.getElementById('res-f-cli');
   const d = document.getElementById('res-f-desde');
   const h = document.getElementById('res-f-hasta');
-  if(a){ a.onclick = renderResumen; }
-  if(c){ c.addEventListener('keyup', e=>{ if(e.key==='Enter') renderResumen(); }); }
-  if(d){ d.onchange = renderResumen; }
-  if(h){ h.onchange = renderResumen; }
-  if(l){ l.onclick = ()=>{ if(c) c.value=''; if(d) d.value=''; if(h) h.value=''; renderResumen(); }; }
+
+  // Helper: keep header and inner filters in sync, then render
+  const wireLive = (headId, innerId) => {
+    const head = document.getElementById(headId);
+    const inner = document.getElementById(innerId);
+    if (!head) return;
+    const syncAndRender = () => {
+      if (inner && inner.value !== head.value) inner.value = head.value;
+      if (typeof renderResumen === 'function') renderResumen();
+    };
+    head.addEventListener('input', syncAndRender);
+    head.addEventListener('change', syncAndRender);
+  };
+
+  // Wire live sync for Cliente/Desde/Hasta
+  wireLive('res-f-cli',   'f-cli');
+  wireLive('res-f-desde', 'f-desde');
+  wireLive('res-f-hasta', 'f-hasta');
+
+  // Apply button still available
+  if (a) a.onclick = ()=>{ if (typeof renderResumen==='function') renderResumen(); };
+
+  // Enter in cliente triggers render (optional)
+  if (c) c.addEventListener('keyup', e => { if (e.key === 'Enter' && typeof renderResumen==='function') renderResumen(); });
+
+  // Clear all (both header + inner)
+  if (l) l.onclick = () => {
+    ['res-f-cli','res-f-desde','res-f-hasta','f-cli','f-desde','f-hasta'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    if (typeof renderResumen==='function') renderResumen();
+  };
 })();
-
-
 document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderResumen() });
 </script>
 </head>
@@ -1181,7 +1207,7 @@ $('btn-print').onclick = async ()=>{
   let remitoId = null;
   try{ remitoId = await createRemitoHeader({ numero:null, fecha:new Date().toISOString(), total_venta:totalPV, total_costo:totalCosto, total_margen:totalMargen, pct:pctG, org_id: rows[0]?.org_id||null }); }catch(_){}
 
-  const cliente = ($('f-cli').value||'').trim();
+  const cliente = (($('f-cli')?.value || document.getElementById('res-f-cli')?.value) || '').trim();
   const d1 = $('f-desde').value || '';
   const d2 = $('f-hasta').value || '';
 
