@@ -259,7 +259,7 @@ setTimeout(()=>{
 
 // Eventos filtros resumen
 (function(){
-  if (window.__resumenWired) return; // evitar múltiples bindings
+  if (window.__resumenWired) return;
   window.__resumenWired = true;
 
   const SCHEDULE_MS = 250;
@@ -269,7 +269,6 @@ setTimeout(()=>{
   const scheduleRender = () => {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
-      // sincronizar una sola vez antes de renderizar
       const pairs = [
         ['res-f-cli', 'f-cli'],
         ['res-f-desde', 'f-desde'],
@@ -287,7 +286,6 @@ setTimeout(()=>{
     }, SCHEDULE_MS);
   };
 
-  // Vincular inputs del encabezado con debounce
   const bind = (id) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -296,12 +294,10 @@ setTimeout(()=>{
   };
   ['res-f-cli','res-f-desde','res-f-hasta'].forEach(bind);
 
-  // Botón Aplicar (render inmediato y único)
   const btnApply = document.getElementById('res-f-aplicar');
   if (btnApply) btnApply.onclick = () => {
     if (timer) clearTimeout(timer);
     timer = null;
-    // sync y render inmediato
     ['res-f-cli','res-f-desde','res-f-hasta'].forEach((hid, i) => {
       const iid = ['f-cli','f-desde','f-hasta'][i];
       const h = document.getElementById(hid), inr = document.getElementById(iid);
@@ -310,7 +306,6 @@ setTimeout(()=>{
     if (typeof renderResumen === 'function') renderResumen();
   };
 
-  // Botón Limpiar (borra ambos juegos y renderiza una sola vez)
   const btnClear = document.getElementById('res-f-limpiar');
   if (btnClear) btnClear.onclick = () => {
     ['res-f-cli','res-f-desde','res-f-hasta','f-cli','f-desde','f-hasta']
@@ -318,7 +313,6 @@ setTimeout(()=>{
     if (typeof renderResumen === 'function') renderResumen();
   };
 
-  // Al cargar, si existen valores internos, replicar al encabezado una sola vez
   window.addEventListener('DOMContentLoaded', () => {
     ['res-f-cli','res-f-desde','res-f-hasta'].forEach((hid, i) => {
       const iid = ['f-cli','f-desde','f-hasta'][i];
@@ -1214,8 +1208,8 @@ function getLastCostFor(codigo){
 }
 
   
-// Resilient print handler (global + delegation)
-    window.__onPrintRemito = async function() {
+// Resilient print handler (global + delegation + popup fallback)
+window.__onPrintRemito = async function() {
 
   if(!can('resumen_print')) return toast('Sin permiso');
   const rows = filtroResumen();
@@ -1238,7 +1232,7 @@ function getLastCostFor(codigo){
   let remitoId = null;
   try{ remitoId = await createRemitoHeader({ numero:null, fecha:new Date().toISOString(), total_venta:totalPV, total_costo:totalCosto, total_margen:totalMargen, pct:pctG, org_id: rows[0]?.org_id||null }); }catch(_){}
 
-  const cliente = ($('f-cli').value||'').trim();
+  const cliente = (($('f-cli')?.value || document.getElementById('res-f-cli')?.value) || '').trim();
   const d1 = $('f-desde').value || '';
   const d2 = $('f-hasta').value || '';
 
@@ -1405,21 +1399,38 @@ function getLastCostFor(codigo){
     <scr${''}ipt>window.onload=function(){window.print();setTimeout(()=>window.close(),400);}</scr${''}ipt>
   </body></html>`;
 
-  const w = window.open('','_blank');
-  w.document.open(); w.document.write(html); w.document.close();
-
+  let w = window.open('','_blank');
+  if (!w || w.closed || typeof w.closed === 'undefined') {
+    // Popup bloqueado -> fallback con iframe oculto
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0'; iframe.style.bottom = '0';
+    iframe.style.width = '0'; iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+    iframe.onload = () => {
+      try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch(_) {}
+      setTimeout(() => { try { document.body.removeChild(iframe); } catch(_){} }, 800);
     };
-    // Event delegation: works even if DOM is re-rendered
-    (function(){
-      const __printDelegated = (e) => {
-        const btn = e.target.closest('#btn-print');
-        if (!btn) return;
-        e.preventDefault();
-        if (typeof window.__onPrintRemito === 'function') window.__onPrintRemito();
-      };
-      document.removeEventListener('click', __printDelegated);
-      document.addEventListener('click', __printDelegated);
-    })();
+  } else {
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+
+};
+// Event delegation: works even if DOM is re-rendered
+(function(){
+  if (window.__ALTUM_printDelegation) return;
+  window.__ALTUM_printDelegation = true;
+  const __printDelegated = (e) => {
+    const btn = e.target.closest && e.target.closest('#btn-print');
+    if (!btn) return;
+    e.preventDefault();
+    if (typeof window.__onPrintRemito === 'function') window.__onPrintRemito();
+  };
+  document.addEventListener('click', __printDelegated);
+})();
 
 
   function filtroResumen(){
@@ -1864,52 +1875,29 @@ function activateTab(tab){ document.querySelectorAll('section[id^="tab-"]').forE
   if (window.__ALTUM_wiredDelegation) return;
   window.__ALTUM_wiredDelegation = true;
 
-  // Helper: safely run async actions with UI lock/unlock
   async function __runSafely(action, lockSelector) {
     const btn = lockSelector ? document.querySelector(lockSelector) : null;
     if (btn) btn.disabled = true;
     document.body.classList.add('altum-busy');
-    try {
-      await action();
-    } catch (err) {
-      console.error('ALTUM error:', err);
-      alert('Ocurrió un error al ejecutar la acción. Revisá la consola (F12) para más detalles.');
-    } finally {
-      if (btn) btn.disabled = false;
-      document.body.classList.remove('altum-busy');
-    }
+    try { await action(); }
+    catch (err) { console.error('ALTUM error:', err); alert('Ocurrió un error al ejecutar la acción. Revisá la consola (F12).'); }
+    finally { if (btn) btn.disabled = false; document.body.classList.remove('altum-busy'); }
   }
-
-  // Exponer helpers globales por si otros módulos los quieren usar
   window.__ALTUM_runSafely = __runSafely;
 
-  // Delegado de impresión (una única vez y estable)
+  // upgrade existing print delegation to runSafely
+  document.removeEventListener('click', window.__ALTUM_onClick);
   window.__ALTUM_onClick = function(e){
     const printBtn = e.target.closest && e.target.closest('#btn-print');
-    if (printBtn) {
-      e.preventDefault();
-      if (typeof window.__onPrintRemito === 'function') {
-        __runSafely(() => window.__onPrintRemito(), '#btn-print');
-      }
-      return;
-    }
+    if (printBtn) { e.preventDefault(); return __runSafely(() => window.__onPrintRemito(), '#btn-print'); }
     const exportBtn = e.target.closest && e.target.closest('#btn-export');
-    if (exportBtn) {
-      e.preventDefault();
-      if (typeof window.__onExportExcel === 'function') {
-        __runSafely(() => window.__onExportExcel(), '#btn-export');
-      }
-      return;
-    }
+    if (exportBtn && typeof window.__onExportExcel === 'function') { e.preventDefault(); return __runSafely(() => window.__onExportExcel(), '#btn-export'); }
   };
-
-  // Limpieza previa si quedó un handler viejo (por recargas parciales)
-  document.removeEventListener('click', window.__ALTUM_onClick);
   document.addEventListener('click', window.__ALTUM_onClick, { passive: false });
 
-  // CSS mínimo para indicar estado ocupado (no bloquea, pero evita doble click)
   const style = document.createElement('style');
   style.textContent = '.altum-busy { cursor: progress !important; }';
   document.head.appendChild(style);
 })();
 </script>
+
