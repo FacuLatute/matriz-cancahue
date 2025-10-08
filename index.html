@@ -1437,7 +1437,9 @@ window.__onPrintRemito = async function() {
       <div class="box"><div><b>Total Venta:</b> $ ${fmt(totalPV)}</div></div>
     </div>
     <table>
-      <thead><tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>PV Total</th><th>Costo</th><th>Margen</th><th>%</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead>
+      <thead>
+        <tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>PV Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr>
+      </thead>
       <tbody>${tbody}</tbody>
     </table>
     <div class="total">Venta: $ ${fmt(totalPV)}</div>
