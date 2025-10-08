@@ -1075,6 +1075,53 @@ async function sbAdjustEnvaseStock(codigo, delta, motivo){
   }
 
   /* ===== Producción ===== */
+
+// === Editar Consumo de Insumo (Producción) ===
+async function updateOPConsumo(id, valRaw){
+  try{
+    let txt = String(valRaw ?? '').trim();
+    txt = txt.replace(/\./g, '').replace(',', '.'); // "1.234,56" -> "1234.56"
+    const nuevo = Number(txt) || 0;
+
+    const { data:o, error:e1 } = await supabase.from('produccion').select('*').eq('id', id).maybeSingle();
+    if(e1) console.warn(e1);
+    if(!o){ toast('OP no encontrada'); return; }
+
+    const previo = Number(o.consumo_aplicado ?? o.ins_cant ?? 0) || 0;
+    const delta = +(nuevo - previo);
+
+    if(Math.abs(delta) < 1e-9){
+      await supabase.from('produccion').update({ ins_cant: nuevo }).eq('id', id);
+      await loadAll(); renderProduccion();
+      return;
+    }
+
+    if(delta > 0){
+      // Consumir stock adicional
+      const ok = await sbConsumeStock(o.ins, delta, `Ajuste consumo OP ${id}`);
+      if(!ok){ toast('Stock insuficiente para ajustar consumo'); await loadAll(); renderProduccion(); return; }
+    }else{
+      // Devolver stock
+      await sbUpsertStock({
+        codigo: o.ins,
+        descripcion: (cache.stock[o.ins]?.descripcion)||'',
+        unidad: (cache.stock[o.ins]?.unidad)||'',
+        delta: -delta,
+        motivo: `Devolución consumo OP ${id}`
+      });
+    }
+
+    await supabase.from('produccion').update({ ins_cant: nuevo, consumo_aplicado: nuevo }).eq('id', id);
+    await loadAll();
+    renderProduccion(); renderStock(); renderHistorial();
+    toast('Consumo actualizado');
+  }catch(err){
+    console.error(err);
+    try{ toast(err.message||'Error actualizando consumo'); }catch(_){ alert('Error actualizando consumo'); }
+  }
+}
+
+
   $('pr-desc').addEventListener('blur', ()=>{
     const p=prodByAny(($('pr-desc').value||'').trim()); if(p){ $('pr-unidad').value=p.unidad||$('pr-unidad').value; $('pr-envase').value=p.envase||$('pr-envase').value; if(String(p.codigo).toLowerCase()===String($('pr-desc').value).toLowerCase()) $('pr-desc').value=p.descripcion; }
   });
@@ -1163,7 +1210,7 @@ await supabase.from('produccion').delete().eq('id',id);
         <td>${o.fecha}</td><td>${o.cliente||'-'}</td>
         <td>${o.prod_nombre||''}${o.codigo_prod?` <span class="muted">(${o.codigo_prod})</span>`:''}</td>
         <td>${o.cant}</td><td>${o.unidad||''}</td><td>${o.envase||''}</td>
-        <td>${o.ins}</td><td>${o.ins_cant}</td>
+        <td>${o.ins}</td><td><input type="number" class="num op-consumo" min="0" step="0.01" value="${fmt2(+o.ins_cant||0)}" data-id="${o.id}"></td>
         <td>${o.bulto!=null?fmt2(o.bulto):'-'}</td>
         <td>${o.calidad||'-'}</td>
         <td>${o.kg!=null?fmt2(o.kg):'-'}</td>
@@ -1390,9 +1437,7 @@ window.__onPrintRemito = async function() {
       <div class="box"><div><b>Total Venta:</b> $ ${fmt(totalPV)}</div></div>
     </div>
     <table>
-      <thead>
-        <tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>PV Total</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr>
-      </thead>
+      <thead><tr><th>Fecha</th><th>Producto</th><th>Cant</th><th>Unidad</th><th>Envase</th><th>PV Total</th><th>Costo</th><th>Margen</th><th>%</th><th>Bulto</th><th>Calidad</th><th>Kg</th><th>Respa</th><th>Obs</th></tr></thead>
       <tbody>${tbody}</tbody>
     </table>
     <div class="total">Venta: $ ${fmt(totalPV)}</div>
@@ -1544,7 +1589,7 @@ function renderResumen(){
     return true;
   });
 
-  let totalPV = 0, totalCosto = 0, totalMargen = 0;
+  let totalPV = 0, totalCosto = 0, totalMargen = 0; let totalKg = 0;
 
   function safeNum(x){ const n = +x; return isFinite(n) ? n : 0; }
 
@@ -1568,6 +1613,7 @@ function renderResumen(){
     const bulto = (r.bulto ?? '');
     const calidad = (r.calidad ?? '');
     const kg = r.kg ?? r.kilos ?? '';
+    totalKg += safeNum(kg);
     const respa = r.respa ?? r.responsable ?? '';
     const obs = r.obs ?? r.observaciones ?? '';
 
@@ -1622,10 +1668,12 @@ function renderResumen(){
   const kpis = document.getElementById('resumen-kpis');
   if(kpis){
     const pctG = totalPV>0 ? (totalMargen/totalPV*100) : 0;
+    const cuNeto = totalKg>0 ? (totalCosto/totalKg) : 0;
     const kpiHtml = ''
-      + '<div class="kpi"><span>Venta</span><b>$ ' + fmt(totalPV) + '</b></div>'
-      + '<div class="kpi"><span>Costo</span><b>$ ' + fmt(totalCosto) + '</b></div>'
-      + '<div class="kpi"><span>Margen</span><b>$ ' + fmt(totalMargen) + '</b> <span>' + fmt2(pctG) + '%</span></div>';
+      + '<div class=\"kpi\"><span>Venta</span><b>$ ' + fmt(totalPV) + '</b></div>'
+      + '<div class=\"kpi\"><span>Costo</span><b>$ ' + fmt(totalCosto) + '</b></div>'
+      + '<div class=\"kpi\"><span>CU Neto</span><b>$ ' + fmt(cuNeto) + '</b> <span>' + fmt2(totalKg) + ' kg</span></div>'
+      + '<div class=\"kpi\"><span>Margen</span><b>$ ' + fmt(totalMargen) + '</b> <span>' + fmt2(pctG) + '%</span></div>';
     kpis.innerHTML = kpiHtml;
   }
 
