@@ -171,9 +171,8 @@ async function loadProduccionFromSupabase(){
     if(typeof supabase === 'undefined') return;
     let data=null,error=null; try{ const resp = await supabase.from('produccion').select('id, org_id, fecha, cliente, codigo_prod, prod_nombre, cant, unidad, envase, estado, obs, bulto, calidad, kg, respa').order('fecha', { ascending: true }).limit(5000); data=resp.data; error=resp.error; }catch(e){ error=e; }
     if(!error && Array.isArray(data)){ cache.produccion = data;
-      // construir resumen derivado si no existe
       if(!(cache.resumen && cache.resumen.length)){
-        cache.resumen = buildResumenFromProduccion_STRICT();
+        cache.resumen = buildResumenFromProduccion_LIGHT(data);
       }
     }else{
       console.error('Supabase produccion error', error);
@@ -588,6 +587,38 @@ document.getElementById('tab-resumen')?.addEventListener('click', ()=>{ renderRe
   const { createClient } = window.supabase;
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// === Helper: construir 'resumen' a partir de 'produccion' (fallback seguro) ===
+function buildResumenFromProduccion_LIGHT(list){
+  try{
+    const arr = Array.isArray(list) ? list : [];
+    return arr.map(o => ({
+      id: o.id || null,
+      id_op: o.id || null,
+      org_id: o.org_id || null,
+      fecha: (o.fecha || '').slice(0,10),
+      cliente: o.cliente || '',
+      prod_nombre: o.prod_nombre || o.descripcion || '',
+      codigo_prod: o.codigo_prod || '',
+      cantidad: +(o.cant || 0),
+      cant: +(o.cant || 0),
+      unidad: o.unidad || '',
+      envase: o.envase || '',
+      obs: o.obs || '',
+      bulto: (o.bulto ?? null),
+      calidad: (o.calidad ?? ''),
+      kg: (o.kg ?? 0),
+      respa: (o.respa ?? ''),
+      pv: +(o.pv || 0),
+      precio: +(o.precio || 0),
+      precio_total: +(o.precio_total || 0),
+      costo: +(o.costo || 0),
+      costoUnit: +(o.costo_unit || o.costoUnit || 0),
+      estado: o.estado || ''
+    }));
+  }catch(e){ console.error('buildResumenFromProduccion_LIGHT', e); return []; }
+}
+
+
 // === Helper: envoltorio seguro para acciones async ===
 function safeAsync(fn){
   return async (...args)=>{
@@ -704,6 +735,7 @@ function debounceSave(fn, key, ms=300){
     cache.products=products;
     cache.stock=Object.fromEntries(stockRows.map(s=>[s.codigo,s]));
     cache.pedidos=pedidos; cache.prod=prod; cache.resumen=resumen; cache.hist=hist; cache.envases=envases;
+    try{ if((!cache.resumen || !cache.resumen.length) && (cache.prod && cache.prod.length)){ cache.resumen = buildResumenFromProduccion_LIGHT(cache.prod); } }catch(_){}
   }
 
   /* ===== Productos ===== */
@@ -1581,7 +1613,7 @@ function renderResumen(){
   };
   const safeDate10 = (d)=> (d ? String(d).slice(0,10) : '');
 
-  const rowsAll = src.filter(r => ('estado' in r ? isFinalOP(r) : true));
+  const rowsAll = src.filter(r => { if('estado' in r){ return true; } return true; });
   const rows = rowsAll.filter(r => {
     const cli = String(r.cliente || r.cli || '').toLowerCase();
     const fecha = safeDate10(r.fecha || r.fec || r.f || r.fechaEntrega);
